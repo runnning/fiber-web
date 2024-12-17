@@ -60,14 +60,15 @@ func (d *Delivery) setupRoutes() {
 
 	// API v1 routes with common middleware
 	v1 := d.app.Group("/api/v1", middleware.CommMiddleware()...)
+	{
+		// Public routes
+		v1.Post("/register", userHandler.Register)
+		v1.Post("/login", userHandler.Login)
+		v1.Get("/test", userHandler.TestUser)
+		v1.Get("/users", middleware.Pagination(), userHandler.ListUsers)
 
-	// Public routes
-	v1.Post("/register", userHandler.Register)
-	v1.Post("/login", userHandler.Login)
-	v1.Get("/test", userHandler.TestUser)
-	v1.Get("/users", middleware.Pagination(), userHandler.ListUsers)
+		// Protected routes
+		v1.Get("/users/me", middleware.Jwt(auth.NewJWTManager(d.infra.Config)), userHandler.GetProfile)
+	}
 
-	// Protected routes
-	v2 := v1.Use(middleware.Jwt(auth.NewJWTManager(d.infra.Config)))
-	v2.Get("/users/me", userHandler.GetProfile)
 }
