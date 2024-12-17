@@ -1,6 +1,7 @@
 package cron
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ type Task struct {
 	EntryID  cron.EntryID  // cron任务ID
 	LastTime time.Time     // 上次执行时间
 	mu       sync.Mutex    // 互斥锁
+	done     chan struct{} // 用于停止任务的通道
 }
 
 // Scheduler 调度器
@@ -92,6 +94,7 @@ func (s *Scheduler) runTask(task *Task) error {
 		return ErrTaskIsRunning
 	}
 	task.Running = true
+	task.done = make(chan struct{})
 	task.mu.Unlock()
 
 	// 确保任务结束时重置状态
@@ -99,6 +102,9 @@ func (s *Scheduler) runTask(task *Task) error {
 		task.mu.Lock()
 		task.Running = false
 		task.LastTime = time.Now()
+
+		close(task.done)
+		task.done = nil
 		task.mu.Unlock()
 	}()
 
@@ -108,12 +114,14 @@ func (s *Scheduler) runTask(task *Task) error {
 		done <- task.Func()
 	}()
 
-	// 等待任务完成或超时
+	// 等待任务完成、超时或被停止
 	select {
 	case err := <-done:
 		return err
 	case <-time.After(task.Timeout):
 		return ErrTaskTimeout
+	case <-task.done:
+		return errors.New("task stopped")
 	}
 }
 
@@ -171,4 +179,32 @@ func (s *Scheduler) ListTasks() []*Task {
 		tasks = append(tasks, task)
 	}
 	return tasks
+}
+
+// StopTask 停止正在运行的任务
+func (s *Scheduler) StopTask(name string) error {
+	s.mu.RLock()
+	task, exists := s.tasks[name]
+	s.mu.RUnlock()
+
+	if !exists {
+		return ErrTaskNotFound
+	}
+
+	task.mu.Lock()
+	defer task.mu.Unlock()
+
+	if !task.Running {
+		return ErrTaskNotRunning
+	}
+
+	if task.done != nil {
+		close(task.done)
+		task.Running = false
+		task.LastTime = time.Now()
+		task.done = nil
+		return nil
+	}
+
+	return ErrTaskCannotBeStopped
 }
