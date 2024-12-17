@@ -188,29 +188,16 @@ func (s *FiberServer) printRoute(route *fiber.Route) bool {
 	}
 
 	// 获取处理函数信息
-	var handlerName string
-	if len(route.Handlers) > 0 {
-		handler := route.Handlers[len(route.Handlers)-1]
-		fullFuncName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
-
-		// 如果最后一个处理函数是匿名函数，说明可能是路由组或中间件，跳过
-		if strings.Contains(fullFuncName, ".func") {
-			return false
-		}
-
-		if idx := strings.LastIndex(fullFuncName, "."); idx != -1 {
-			handlerName = fullFuncName[idx+1:]
-		}
-		// 美化处理函数名称
-		handlerName = strings.TrimSuffix(handlerName, "-fm")
-		handlerName = strings.TrimSuffix(handlerName, ".func1")
+	handlerName := s.getHandlerName(route.Handlers)
+	if handlerName == "" {
+		return false
 	}
 
 	// 获取中间件信息
-	middlewares := s.getRouteMiddlewares(route)
+	middlewares := s.getMiddlewares(route)
 
 	// Gin 风格的输出
-	middlewareStr := ""
+	var middlewareStr string
 	if len(middlewares) > 0 {
 		middlewareStr = color.Colorize(" ("+strings.Join(middlewares, ",")+")", color.Magenta)
 	}
@@ -225,55 +212,82 @@ func (s *FiberServer) printRoute(route *fiber.Route) bool {
 	return true
 }
 
-// getRouteMiddlewares 获取路由的所有中间件
-func (s *FiberServer) getRouteMiddlewares(route *fiber.Route) []string {
-	var middlewares []string
+// getHandlerName 获取并处理路由的处理函数名称
+func (s *FiberServer) getHandlerName(handlers []fiber.Handler) string {
+	if len(handlers) == 0 {
+		return ""
+	}
 
-	// 查找路由组的中间件
-	for _, r := range s.app.GetRoutes() {
-		if strings.HasPrefix(route.Path, r.Path+"/") && len(r.Handlers) > 0 {
-			// 收集路由组的中间件
-			for _, handler := range r.Handlers {
-				if name := s.getHandlerName(handler); name != "" {
-					middlewares = append(middlewares, name)
-				}
-			}
+	// 获取最后一个处理函数
+	handler := handlers[len(handlers)-1]
+	fullFuncName := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
+
+	// 如果是匿名函数，跳过
+	if strings.Contains(fullFuncName, ".func") {
+		return ""
+	}
+
+	// 提取函数名
+	if idx := strings.LastIndex(fullFuncName, "."); idx != -1 {
+		fullFuncName = fullFuncName[idx+1:]
+	}
+
+	return strings.TrimSuffix(strings.TrimSuffix(fullFuncName, "-fm"), ".func1")
+}
+
+// getMiddlewares 获取路由的所有中间件
+func (s *FiberServer) getMiddlewares(route *fiber.Route) []string {
+	var middlewares []string
+	routes := s.app.GetRoutes()
+
+	// 查找最长匹配的路由组
+	var groupHandlers []fiber.Handler
+	maxLen := -1
+	for _, r := range routes {
+		rPath := r.Path + "/"
+		if route.Path != r.Path && strings.HasPrefix(route.Path, rPath) && len(rPath) > maxLen {
+			maxLen = len(rPath)
+			groupHandlers = r.Handlers
 		}
 	}
 
-	// 收集路由自己的中间件
+	// 处理路由组中间件
+	if len(groupHandlers) > 0 {
+		middlewares = s.processHandlers(groupHandlers)
+	}
+
+	// 处理路由自身中间件
 	if len(route.Handlers) > 1 {
-		for _, handler := range route.Handlers[:len(route.Handlers)-1] {
-			if name := s.getHandlerName(handler); name != "" {
-				middlewares = append(middlewares, name)
-			}
-		}
+		middlewares = append(middlewares, s.processHandlers(route.Handlers[:len(route.Handlers)-1])...)
 	}
 
 	return middlewares
 }
 
-// getHandlerName 获取处理函数的名称
-func (s *FiberServer) getHandlerName(handler fiber.Handler) string {
-	name := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
-	if idx := strings.LastIndex(name, "/"); idx != -1 {
-		name = name[idx+1:]
+// processHandlers 处理处理函数列表，提取中间件名称
+func (s *FiberServer) processHandlers(handlers []fiber.Handler) []string {
+	var names []string
+	for _, handler := range handlers {
+		name := runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
+		if idx := strings.LastIndex(name, "/"); idx != -1 {
+			name = name[idx+1:]
+		}
+		name = strings.TrimSuffix(strings.TrimSuffix(name, ".func1"), ".New.func1")
+		if name != "" && !strings.HasPrefix(name, "func") {
+			names = append(names, name)
+		}
 	}
-	name = strings.TrimSuffix(name, ".func1")
-	name = strings.TrimSuffix(name, ".New.func1")
-	if name != "" && !strings.HasPrefix(name, "func") {
-		return name
-	}
-	return ""
+	return names
 }
 
 func (s *FiberServer) Start(addr string) error {
 	// 如果是开发环境，打印路由信息
 	if s.config.Env == "development" {
+		routes := s.app.GetRoutes()
 		fmt.Printf("\n%s\n", color.Colorize("[Fiber]", color.Green))
 
-		for key := range s.app.GetRoutes() {
-			s.printRoute(&s.app.GetRoutes()[key])
+		for i := range routes {
+			s.printRoute(&routes[i])
 		}
 
 		fmt.Printf("\n%s %s\n\n",
