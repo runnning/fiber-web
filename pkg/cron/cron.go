@@ -9,6 +9,15 @@ import (
 	"go.uber.org/zap"
 )
 
+// TaskStatus 任务状态
+type TaskStatus int
+
+const (
+	TaskStatusReady   TaskStatus = iota // 就绪
+	TaskStatusRunning                   // 运行中
+	TaskStatusStopped                   // 已停止
+)
+
 // TaskFunc 定时任务函数类型
 type TaskFunc func() error
 
@@ -18,7 +27,7 @@ type Task struct {
 	Spec     string        // cron表达式
 	Func     TaskFunc      // 执行的函数
 	Timeout  time.Duration // 超时时间
-	Running  bool          // 是否正在运行
+	Status   TaskStatus    // 任务状态
 	EntryID  cron.EntryID  // cron任务ID
 	LastTime time.Time     // 上次执行时间
 	mu       sync.Mutex    // 互斥锁
@@ -57,11 +66,12 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 		Spec:    spec,
 		Func:    f,
 		Timeout: timeout,
+		Status:  TaskStatusReady,
 	}
 
 	// 包装任务函数，添加超时控制和错误处理
 	wrappedFunc := func() {
-		if err := s.runTask(task); err != nil {
+		if err := s.runTask(task); err != nil && !errors.Is(err, ErrTaskStopped) {
 			s.log.Error("task execution failed",
 				zap.String("task", name),
 				zap.Error(err),
@@ -89,20 +99,19 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 // runTask 运行任务
 func (s *Scheduler) runTask(task *Task) error {
 	task.mu.Lock()
-	if task.Running {
+	if task.Status == TaskStatusRunning {
 		task.mu.Unlock()
 		return ErrTaskIsRunning
 	}
-	task.Running = true
+	task.Status = TaskStatusRunning
 	task.done = make(chan struct{})
 	task.mu.Unlock()
 
 	// 确保任务结束时重置状态
 	defer func() {
 		task.mu.Lock()
-		task.Running = false
+		task.Status = TaskStatusStopped
 		task.LastTime = time.Now()
-
 		close(task.done)
 		task.done = nil
 		task.mu.Unlock()
@@ -117,6 +126,9 @@ func (s *Scheduler) runTask(task *Task) error {
 	// 等待任务完成、超时或被停止
 	select {
 	case err := <-done:
+		task.mu.Lock()
+		task.Status = TaskStatusReady
+		task.mu.Unlock()
 		return err
 	case <-time.After(task.Timeout):
 		return ErrTaskTimeout
@@ -194,13 +206,13 @@ func (s *Scheduler) StopTask(name string) error {
 	task.mu.Lock()
 	defer task.mu.Unlock()
 
-	if !task.Running {
+	if task.Status != TaskStatusRunning {
 		return ErrTaskNotRunning
 	}
 
 	if task.done != nil {
 		close(task.done)
-		task.Running = false
+		task.Status = TaskStatusStopped
 		task.LastTime = time.Now()
 		task.done = nil
 		return nil

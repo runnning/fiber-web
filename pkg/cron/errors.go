@@ -9,4 +9,5 @@ var (
 	ErrTaskTimeout         = errors.New("task execution timeout")
 	ErrTaskNotRunning      = errors.New("task is not running")
 	ErrTaskCannotBeStopped = errors.New("task cannot be stopped")
+	ErrTaskStopped         = errors.New("task stopped")
 )
