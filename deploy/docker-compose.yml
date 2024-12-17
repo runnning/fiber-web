@@ -1,0 +1,99 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: fiber_web_app
+    ports:
+      - "3000:3000"
+    environment:
+      - APP_ENV=production
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=fiber_web
+      - MYSQL_PASSWORD=fiber_web_password
+      - MYSQL_DATABASE=fiber_web
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NSQ_LOOKUPD_HOST=nsqlookupd
+      - NSQ_LOOKUPD_PORT=4161
+    depends_on:
+      - mysql
+      - redis
+      - nsqlookupd
+      - nsqd
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: fiber_web_mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=fiber_web
+      - MYSQL_USER=fiber_web
+      - MYSQL_PASSWORD=fiber_web
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: fiber_web_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
+  nsqlookupd:
+    image: nsqio/nsq
+    container_name: fiber_web_nsqlookupd
+    command: /nsqlookupd
+    ports:
+      - "4160:4160"
+      - "4161:4161"
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
+  nsqd:
+    image: nsqio/nsq
+    container_name: fiber_web_nsqd
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160
+    ports:
+      - "4150:4150"
+      - "4151:4151"
+    depends_on:
+      - nsqlookupd
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
+  nsqadmin:
+    image: nsqio/nsq
+    container_name: fiber_web_nsqadmin
+    command: /nsqadmin --lookupd-http-address=nsqlookupd:4161
+    ports:
+      - "4171:4171"
+    depends_on:
+      - nsqlookupd
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
+networks:
+  fiber_web_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:

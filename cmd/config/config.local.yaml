@@ -1,0 +1,34 @@
+server:
+  address: ":3000"
+  port: 3000
+
+database:
+  host: "localhost"
+  port: 3306
+  user: "root"
+  password: "root"
+  dbname: "fiber_web"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+
+nsq:
+  nsqd:
+    host: "localhost"
+    port: 4150
+  lookupd:
+    host: "localhost"
+    port: 4161
+
+app:
+  env: "development"
+  name: "fiber-web"
+  language: "zh"
+
+jwt:
+  secret_key: "your-secret-key-here"
+  access_token_expiry: "15m"
+  refresh_token_expiry: "168h" 
