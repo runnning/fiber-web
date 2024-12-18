@@ -58,9 +58,9 @@ A production-ready Go web application scaffold using Fiber framework with clean 
 ```
 .
 ├── apps/                   # Application directories
-│   ├── api/               # API Service
+│   ├── admin/               # admin Service
 │   │   ├── cmd/          # Entry points
-│   │   │   ├── admin/      # API service entry
+│   │   │   ├── api/      # API service entry
 │   │   │   │   └── main.go
 │   │   │   └── config/   # Configuration files
 │   │   └── internal/     # Internal code
