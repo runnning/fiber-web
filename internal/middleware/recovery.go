@@ -12,7 +12,7 @@ import (
 )
 
 // Recovery 返回一个自定义的恢复中间件
-func Recovery() fiber.Handler {
+func Recovery(env string) fiber.Handler {
 	// 返回一个新的中间件处理器
 	return func(c *fiber.Ctx) error {
 		defer func() {
@@ -46,11 +46,10 @@ func Recovery() fiber.Handler {
 					zap.Strings("stack", relevantStack),
 				)
 
-				// 在开发环境下返回详细错误信息
-				if c.Locals("APP_ENV") == "development" {
+				// 使用传入的环境变量
+				if env == "development" {
 					_ = response.ServerError(c, fmt.Errorf("%v\nStack:\n%s", err, strings.Join(relevantStack, "\n")))
 				} else {
-					// 生产环境只返回简单错误信息
 					_ = response.ServerError(c, fmt.Errorf("internal server error"))
 				}
 			}

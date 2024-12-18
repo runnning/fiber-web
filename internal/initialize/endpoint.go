@@ -59,7 +59,7 @@ func (d *Delivery) setupRoutes() {
 	userHandler := endpoint.NewUserHandler(d.useCase.UserUseCase, d.validator)
 
 	// API v1 routes with common middleware
-	v1 := d.app.Group("/api/v1", middleware.CommMiddleware()...)
+	v1 := d.app.Group("/api/v1", middleware.CommMiddleware(d.infra.Config.App.Env)...)
 	{
 		// Public routes
 		v1.Post("/register", userHandler.Register)
