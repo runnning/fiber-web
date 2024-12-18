@@ -93,7 +93,8 @@ A production-ready Go web application scaffold using Fiber framework with clean 
 │       ├── fp/           # Functional programming tools
 │       ├── maps/         # Map operations
 │       ├── slice/        # Slice operations
-│       └── timeutil/     # Time utilities
+│       └── time_util/     # Time utilities
+│       └── file_util/     # File utilities
 ├── tools/                 # Development tools
 │   ├── generator/        # Code generator
 │   │   └── templates/    # Code templates
