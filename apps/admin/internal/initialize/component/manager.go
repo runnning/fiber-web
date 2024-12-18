@@ -7,7 +7,6 @@ import (
 	"fiber_web/apps/admin/internal/initialize/api"
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/server"
-	"github.com/gofiber/fiber/v2"
 	"log"
 	"os"
 	"os/signal"
@@ -22,71 +21,23 @@ const (
 	AppTypeAPI AppType = "api"
 )
 
-// DeliveryStrategy 路由策略接口
-type DeliveryStrategy interface {
-	Register(boot *bootstrap.Bootstrapper, useCase *initialize.UseCase, infra *initialize.Infrastructure, app *fiber.App)
-}
-
-// APIDelivery API路由策略
-type APIDelivery struct{}
-
-func (d *APIDelivery) Register(boot *bootstrap.Bootstrapper, useCase *initialize.UseCase, infra *initialize.Infrastructure, app *fiber.App) {
-	delivery := api.NewDelivery(useCase, infra, app)
-	delivery.Register(boot)
-}
-
-// DeliveryFactory 路由策略工厂
-type DeliveryFactory struct{}
-
-func (f *DeliveryFactory) CreateStrategy(appType AppType) DeliveryStrategy {
-	switch appType {
-	case AppTypeAPI:
-		return &APIDelivery{}
-	default:
-		return nil
-	}
-}
-
 // Manager 应用管理器
 type Manager struct {
-	cfg      *config.Config
-	appType  AppType
-	server   *server.FiberServer
-	boot     *bootstrap.Bootstrapper
-	factory  *DeliveryFactory
-	strategy DeliveryStrategy
+	cfg     *config.Config
+	appType AppType
+	server  *server.FiberServer
+	boot    *bootstrap.Bootstrapper
 }
 
-// NewManager 创建应用管理器
 func NewManager(cfg *config.Config, appType AppType) *Manager {
-	factory := &DeliveryFactory{}
 	return &Manager{
-		cfg:      cfg,
-		appType:  appType,
-		factory:  factory,
-		strategy: factory.CreateStrategy(appType),
+		cfg:     cfg,
+		appType: appType,
 	}
 }
 
-// Initialize 初始化应用
 func (m *Manager) Initialize(ctx context.Context) error {
-	if err := m.initServer(); err != nil {
-		return err
-	}
-
-	if err := m.initBootstrap(); err != nil {
-		return err
-	}
-
-	if err := m.initApplication(ctx); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// initServer 初始化服务器
-func (m *Manager) initServer() error {
+	// 初始化服务器
 	m.server = server.NewFiberServer(
 		server.WithReadTimeout(time.Second*30),
 		server.WithWriteTimeout(time.Second*30),
@@ -96,17 +47,11 @@ func (m *Manager) initServer() error {
 		server.WithServerHeader("Fiber"),
 		server.WithBodyLimit(4*1024*1024),
 	)
-	return nil
-}
 
-// initBootstrap 初始化引导程序
-func (m *Manager) initBootstrap() error {
+	// 初始化引导程序
 	m.boot = bootstrap.New()
-	return nil
-}
 
-// initApplication 初始化应用组件
-func (m *Manager) initApplication(ctx context.Context) error {
+	// 初始化组件
 	infra := initialize.NewInfrastructure(m.cfg)
 	infra.Register(m.boot)
 
@@ -114,8 +59,10 @@ func (m *Manager) initApplication(ctx context.Context) error {
 	useCase := initialize.NewUseCase(repo)
 	useCase.Register(m.boot)
 
-	if m.strategy != nil {
-		m.strategy.Register(m.boot, useCase, infra, m.server.App())
+	// 根据应用类型初始化路由
+	if m.appType == AppTypeAPI {
+		delivery := api.NewDelivery(useCase, infra, m.server.App())
+		delivery.Register(m.boot)
 	}
 
 	return m.boot.Bootstrap(ctx)
