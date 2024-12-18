@@ -87,6 +87,7 @@ A production-ready Go web application scaffold using Fiber framework with clean 
 │   ├── validator/        # Validator
 │   ├── ctx/              # Context utilities
 │   ├── query/            # Query utilities
+│   ├── security/         # Security utilities
 │   └── utils/            # Utility packages
 │       ├── concurrent/   # Concurrent programming utilities
 │       ├── errorx/       # Enhanced error handling
