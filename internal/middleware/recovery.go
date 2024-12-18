@@ -47,7 +47,7 @@ func Recovery() fiber.Handler {
 				)
 
 				// 在开发环境下返回详细错误信息
-				if c.Get("APP_ENV") == "development" {
+				if c.Locals("APP_ENV") == "development" {
 					_ = response.ServerError(c, fmt.Errorf("%v\nStack:\n%s", err, strings.Join(relevantStack, "\n")))
 				} else {
 					// 生产环境只返回简单错误信息

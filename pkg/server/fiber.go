@@ -170,6 +170,12 @@ func NewFiberServer(opts ...Option) *FiberServer {
 		AppName:                   config.AppName,
 	})
 
+	// 设置应用级别的环境变量
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("APP_ENV", config.Env)
+		return c.Next()
+	})
+
 	return &FiberServer{
 		app:    app,
 		config: config,
