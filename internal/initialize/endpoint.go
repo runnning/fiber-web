@@ -32,43 +32,21 @@ func NewDelivery(useCase *UseCase, infra *Infrastructure, app *fiber.App) *Deliv
 // Register registers delivery initialization
 func (d *Delivery) Register(b *bootstrap.Bootstrapper) {
 	b.Register(func(ctx context.Context) error {
-		// Initialize handlers
-		endpoint.NewUserHandler(d.useCase.UserUseCase, d.validator)
-		// Initialize other handlers
+		// Create user handler
+		userHandler := endpoint.NewUserHandler(d.useCase.UserUseCase, d.validator)
 
-		// Initialize middlewares
-		//d.setupMiddlewares()
+		// API v1 routes with common middleware
+		v1 := d.app.Group("/api/v1", middleware.CommMiddleware(d.infra.Config.App.Env)...)
+		{
+			// Public routes
+			v1.Post("/register", userHandler.Register)
+			v1.Post("/login", userHandler.Login)
+			v1.Get("/test", userHandler.TestUser)
+			v1.Get("/users", middleware.Pagination(), userHandler.ListUsers)
 
-		// Initialize routes
-		//d.app.Use(middleware.CommMiddleware)
-		d.setupRoutes()
-
+			// Protected routes
+			v1.Get("/users/me", middleware.Jwt(auth.NewJWTManager(d.infra.Config)), userHandler.GetProfile)
+		}
 		return nil
 	}, nil)
-}
-
-//func (d *Delivery) setupMiddlewares() {
-//	// Setup global middlewares
-//	d.app.Use(recover.New())
-//	d.app.Use(logger.New())
-//	d.app.Use(cors.New())
-//}
-
-func (d *Delivery) setupRoutes() {
-	// Create user handler
-	userHandler := endpoint.NewUserHandler(d.useCase.UserUseCase, d.validator)
-
-	// API v1 routes with common middleware
-	v1 := d.app.Group("/api/v1", middleware.CommMiddleware(d.infra.Config.App.Env)...)
-	{
-		// Public routes
-		v1.Post("/register", userHandler.Register)
-		v1.Post("/login", userHandler.Login)
-		v1.Get("/test", userHandler.TestUser)
-		v1.Get("/users", middleware.Pagination(), userHandler.ListUsers)
-
-		// Protected routes
-		v1.Get("/users/me", middleware.Jwt(auth.NewJWTManager(d.infra.Config)), userHandler.GetProfile)
-	}
-
 }
