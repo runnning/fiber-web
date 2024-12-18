@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"fiber_web/internal/entity"
+	"fiber_web/apps/admin/internal/entity"
 	"fiber_web/pkg/query"
 	"fiber_web/pkg/redis"
 

@@ -1,8 +1,10 @@
-package initialize
+package component
 
 import (
 	"context"
-	"fiber_web/bootstrap"
+	"fiber_web/apps/admin/internal/bootstrap"
+	"fiber_web/apps/admin/internal/initialize"
+	"fiber_web/apps/admin/internal/initialize/api"
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/server"
 	"log"
@@ -12,15 +14,24 @@ import (
 	"time"
 )
 
+// AppType 应用类型
+type AppType string
+
+const (
+	AppTypeAPI AppType = "api"
+)
+
 type Manager struct {
-	cfg    *config.Config
-	server *server.FiberServer
-	boot   *bootstrap.Bootstrapper
+	cfg     *config.Config
+	appType AppType
+	server  *server.FiberServer
+	boot    *bootstrap.Bootstrapper
 }
 
-func NewManager(cfg *config.Config) *Manager {
+func NewManager(cfg *config.Config, appType AppType) *Manager {
 	return &Manager{
-		cfg: cfg,
+		cfg:     cfg,
+		appType: appType,
 	}
 }
 
@@ -41,15 +52,17 @@ func (m *Manager) Initialize(ctx context.Context) error {
 
 	// 初始化组件
 	app := m.server.App()
-	infra := NewInfrastructure(m.cfg)
+	infra := initialize.NewInfrastructure(m.cfg)
 	infra.Register(m.boot)
-
-	repo := NewRepository(infra)
-	useCase := NewUseCase(repo)
+	repo := initialize.NewRepository(infra)
+	useCase := initialize.NewUseCase(repo)
 	useCase.Register(m.boot)
 
-	delivery := NewDelivery(useCase, infra, app)
-	delivery.Register(m.boot)
+	switch m.appType {
+	case AppTypeAPI:
+		delivery := api.NewDelivery(useCase, infra, app)
+		delivery.Register(m.boot)
+	}
 
 	return m.boot.Bootstrap(ctx)
 }

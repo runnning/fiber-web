@@ -57,54 +57,52 @@ A production-ready Go web application scaffold using Fiber framework with clean 
 
 ```
 .
-├── cmd/                    # Application entry points
-│   ├── api/               # API server
-│   │   └── main.go
-│   └── config/           # Configuration files
-│       ├── config.local.yaml
-│       └── config.docker.yaml
-├── deploy/                # Deployment configurations
-│   └── Dockerfile
-├── internal/              # Private application code
-│   ├── entity/           # Enterprise business rules (entities)
-│   ├── usecase/          # Application business rules
-│   ├── repository/       # Interface adapters (database implementations)
-│   ├── endpoint/         # Interface adapters (HTTP handlers)
-│   ├── middleware/       # Custom middleware
-│   └── initialize/       # Application initialization
-├── pkg/                   # Public libraries
-│   ├── config/           # Configuration management
-│   ├── cron/             # Task scheduler
-│   ├── database/         # Database connections
-│   ├── logger/           # Logging utilities
-│   ├── redis/            # Redis client
-│   ├── lock/             # Distributed lock
-│   ├── auth/             # Authentication & Authorization
-│   ├── queue/            # Message queue
-│   ├── server/           # Fiber server
-│   ├── color/            # Color utilities
-│   ├── http_cli/         # Http client
-│   ├── validator/        # Validator
-│   ├── ctx/              # Context utilities
-│   ├── query/            # Query utilities
-│   ├── security/         # Security utilities
-│   └── utils/            # Utility packages
-│       ├── concurrent/   # Concurrent programming utilities
-│       ├── errorx/       # Enhanced error handling
-│       ├── fp/           # Functional programming tools
-│       ├── maps/         # Map operations
-│       ├── slice/        # Slice operations
-│       └── time_util/     # Time utilities
-│       └── file_util/     # File utilities
-├── tools/                 # Development tools
-│   ├── generator/        # Code generator
-│   │   └── templates/    # Code templates
-│   │       ├── endpoint.go
-│   │       ├── repository.go
-│   │       └── usecase.go
-│   │       └── entity.go
-│   └── main.go
-└── logs/                  # Application logs
+├── apps/                   # Application directories
+│   ├── api/               # API Service
+│   │   ├── cmd/          # Entry points
+│   │   │   ├── admin/      # API service entry
+│   │   │   │   └── main.go
+│   │   │   └── config/   # Configuration files
+│   │   └── internal/     # Internal code
+│   │       ├── endpoint/ # HTTP handlers
+│   │       ├── bootstrap/ # bootstrap
+│   │       ├── middleware/ # middleware
+│   │       ├── entity/   # Domain entities
+│   │       ├── initialize/ # App initialization
+│   │       ├── repository/ # Data repositories
+│   │       └── usecase/   # Business logic
+├── deploy/               # Deployment configurations
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── pkg/                  # Public libraries
+│   ├── auth/            # Authentication & Authorization
+│   ├── config/          # Configuration management
+│   ├── database/        # Database connections
+│   ├── logger/          # Logging utilities
+│   ├── redis/           # Redis client
+│   ├── lock/            # Distributed lock
+│   ├── queue/           # Message queue
+│   ├── server/          # HTTP server
+│   ├── validator/       # Validator
+│   ├── color/           # Color utilities
+│   ├── ctx/             # Context utilities
+│   ├── query/           # Query utilities
+│   ├── response/        # Response utilities
+│   ├── server/          # Server utilities
+│   ├── security/        # Security utilities
+│   ├── logger/          # Logger utilities
+│   ├── cron/            # Cron utilities
+│   ├── http_cli/        # HTTP client utilities
+│   └── utils/           # Utility packages
+│       ├── concurrent/  # Concurrency utilities
+│       ├── errorx/      # Error handling
+│       ├── maps/        # Map operations
+│       ├── slice/       # Slice operations
+│       └── time_util/   # Time utilities
+│       └── file_util/   # File utilities
+│       └── fp/          # Functional programming
+└── tools/               # Development tools
+    └── generator/       # Code generator
 ```
 
 ## Prerequisites

@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./cmd/api
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./apps/admin/cmd/api
 
 # Stage 2: Run
 FROM alpine:latest
@@ -39,7 +39,7 @@ WORKDIR /app
 
 # Copy binary and config from builder
 COPY --from=builder /app/main .
-COPY --from=builder /app/cmd/config/config.docker.yaml /app/config/config.yaml
+COPY --from=builder /app/apps/admin/cmd/config/config.docker.yaml /app/config/config.yaml
 
 # Use non-root user
 #USER appuser

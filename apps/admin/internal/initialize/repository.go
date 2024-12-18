@@ -2,8 +2,8 @@ package initialize
 
 import (
 	"context"
-	"fiber_web/bootstrap"
-	"fiber_web/internal/repository"
+	"fiber_web/apps/admin/internal/bootstrap"
+	"fiber_web/apps/admin/internal/repository"
 )
 
 // Repository initializes repositories

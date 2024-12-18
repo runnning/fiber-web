@@ -2,8 +2,8 @@ package usecase
 
 import (
 	"context"
-	"fiber_web/internal/entity"
-	"fiber_web/internal/repository"
+	"fiber_web/apps/admin/internal/entity"
+	"fiber_web/apps/admin/internal/repository"
 	"fiber_web/pkg/query"
 )
 

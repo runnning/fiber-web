@@ -1,8 +1,8 @@
 package endpoint
 
 import (
-	"fiber_web/internal/entity"
-	"fiber_web/internal/usecase"
+	"fiber_web/apps/admin/internal/entity"
+	"fiber_web/apps/admin/internal/usecase"
 	"fiber_web/pkg/ctx"
 	"fiber_web/pkg/query"
 	"fiber_web/pkg/response"

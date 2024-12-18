@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"fiber_web/apps/admin/internal/initialize/component"
 	"log"
 
-	"fiber_web/internal/initialize"
 	"fiber_web/pkg/config"
 )
 
@@ -20,7 +20,7 @@ func main() {
 	}
 
 	// 创建并运行应用
-	manager := initialize.NewManager(cfg)
+	manager := component.NewManager(cfg, component.AppTypeAPI)
 	if err := manager.Initialize(ctx); err != nil {
 		log.Fatal(err)
 	}

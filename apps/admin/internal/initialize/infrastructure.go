@@ -2,7 +2,7 @@ package initialize
 
 import (
 	"context"
-	"fiber_web/bootstrap"
+	"fiber_web/apps/admin/internal/bootstrap"
 	"fiber_web/pkg/auth"
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/cron"

@@ -1,10 +1,11 @@
-package initialize
+package api
 
 import (
 	"context"
-	"fiber_web/bootstrap"
-	"fiber_web/internal/endpoint"
-	"fiber_web/internal/middleware"
+	"fiber_web/apps/admin/internal/bootstrap"
+	"fiber_web/apps/admin/internal/endpoint"
+	"fiber_web/apps/admin/internal/initialize"
+	"fiber_web/apps/admin/internal/middleware"
 	"fiber_web/pkg/auth"
 	"fiber_web/pkg/validator"
 
@@ -13,14 +14,14 @@ import (
 
 // Delivery initializes HTTP handlers
 type Delivery struct {
-	useCase   *UseCase
-	infra     *Infrastructure
+	useCase   *initialize.UseCase
+	infra     *initialize.Infrastructure
 	app       *fiber.App
 	validator *validator.Validator
 }
 
 // NewDelivery creates delivery initializer
-func NewDelivery(useCase *UseCase, infra *Infrastructure, app *fiber.App) *Delivery {
+func NewDelivery(useCase *initialize.UseCase, infra *initialize.Infrastructure, app *fiber.App) *Delivery {
 	return &Delivery{
 		useCase:   useCase,
 		infra:     infra,
