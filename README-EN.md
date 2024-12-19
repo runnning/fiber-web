@@ -1,5 +1,7 @@
 # Fiber Web Framework Scaffold
 
+English| [简体中文](README.md)
+
 A production-ready Go web application scaffold using Fiber framework with clean architecture.
 
 ## Features
