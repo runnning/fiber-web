@@ -65,13 +65,15 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.NSQ = producer
 	i.Logger.Info("NSQ initialized")
 
+	// 启动 Cron
+	i.Cron = cron.NewScheduler(logger.GetLogger())
+	i.Logger.Info("Cron initialized")
+
 	return nil
 }
 
 // Start 实现 Component 接口
 func (i *Infra) Start(ctx context.Context) error {
-	// 启动 Cron
-	i.Cron = cron.NewScheduler(logger.GetLogger())
 	i.Cron.Start()
 	return nil
 }
