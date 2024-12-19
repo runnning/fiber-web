@@ -42,19 +42,18 @@ func (a *App) Init(ctx context.Context) error {
 }
 
 func (a *App) initRoutes(ctx context.Context) error {
-	validator := validator.New(&validator.Config{Language: a.infra.Config.App.Language})
-
 	switch a.appType {
 	case AppTypeAPI:
-		return a.initAPIRoutes(validator)
+		return a.initAPIRoutes(ctx)
 	case AppTypeAdmin:
-		return a.initAdminRoutes(validator)
+		return a.initAdminRoutes(ctx)
 	default:
 		return fmt.Errorf("unsupported app type: %s", a.appType)
 	}
 }
 
-func (a *App) initAPIRoutes(validator *validator.Validator) error {
+func (a *App) initAPIRoutes(ctx context.Context) error {
+	validator := validator.New(&validator.Config{Language: a.infra.Config.App.Language})
 	userHandler := endpoint.NewUserHandler(a.domain.Uses.User, validator)
 	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
 	{
@@ -68,7 +67,7 @@ func (a *App) initAPIRoutes(validator *validator.Validator) error {
 	return nil
 }
 
-func (a *App) initAdminRoutes(validator *validator.Validator) error {
+func (a *App) initAdminRoutes(ctx context.Context) error {
 	// TODO: 实现管理后台路由
 	return nil
 }
