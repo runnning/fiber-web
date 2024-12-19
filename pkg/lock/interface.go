@@ -5,25 +5,23 @@ import (
 	"time"
 )
 
-// Locker represents a distributed lock interface
-type Locker interface {
-	// TryLock attempts to acquire the lock
-	// Returns true if the lock was acquired, false otherwise
-	TryLock(ctx context.Context) (bool, error)
+// Lock 分布式锁接口
+type Lock interface {
+	// Lock 加锁
+	Lock(ctx context.Context, key string, value any, ttl time.Duration) error
 
-	// Lock blocks until the lock is acquired or context is cancelled
-	Lock(ctx context.Context) error
+	// TryLock 尝试加锁,立即返回结果
+	TryLock(ctx context.Context, key string, value any, ttl time.Duration) (bool, error)
 
-	// Unlock releases the lock
-	Unlock(ctx context.Context) error
+	// LockWithTimeout 在指定时间内尝试加锁
+	LockWithTimeout(ctx context.Context, key string, value any, ttl time.Duration, timeout time.Duration) error
 
-	// Refresh extends the lock's expiration
-	Refresh(ctx context.Context) error
+	// Unlock 解锁
+	Unlock(ctx context.Context, key string) error
 
-	// IsHeld checks if the lock is currently held
-	IsHeld(ctx context.Context) (bool, error)
+	// Refresh 刷新锁的过期时间
+	Refresh(ctx context.Context, key string, ttl time.Duration) error
 
-	// AutoRefresh automatically refreshes the lock periodically
-	// Returns a cancel function to stop the auto-refresh
-	AutoRefresh(ctx context.Context, interval time.Duration) (func(), error)
+	// GetLockTTL 获取锁的剩余过期时间
+	GetLockTTL(ctx context.Context, key string) (time.Duration, error)
 }
