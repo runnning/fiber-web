@@ -23,18 +23,20 @@ const (
 
 // Component 组件管理器
 type Component struct {
-	cfg     *config.Config
-	appType AppType
-	server  *server.FiberServer
-	boot    *bootstrap.Bootstrapper
-	infra   *Infra
-	app     *App
+	cfg            *config.Config
+	appType        AppType
+	server         *server.FiberServer
+	boot           *bootstrap.Bootstrapper
+	infra          *Infra
+	app            *App
+	lifecycleHooks LifecycleHooks
 }
 
 func NewComponent(cfg *config.Config, appType AppType) *Component {
 	return &Component{
-		cfg:     cfg,
-		appType: appType,
+		cfg:            cfg,
+		appType:        appType,
+		lifecycleHooks: NewLifecycleHooks(appType),
 	}
 }
 
@@ -54,26 +56,8 @@ func (c *Component) Initialize(ctx context.Context) error {
 
 	c.boot = bootstrap.New()
 
-	// 添加生命周期钩子
-	c.boot.AddHook(bootstrap.HookBeforeInit, func(ctx context.Context) error {
-		log.Printf("[%s] Starting application initialization...", c.cfg.App.Name)
-		return nil
-	})
-
-	c.boot.AddHook(bootstrap.HookAfterInit, func(ctx context.Context) error {
-		log.Printf("[%s] Application initialization completed", c.cfg.App.Name)
-		return nil
-	})
-
-	c.boot.AddHook(bootstrap.HookBeforeStop, func(ctx context.Context) error {
-		log.Printf("[%s] Starting application shutdown...", c.cfg.App.Name)
-		return nil
-	})
-
-	c.boot.AddHook(bootstrap.HookAfterStop, func(ctx context.Context) error {
-		log.Printf("[%s] Application shutdown completed", c.cfg.App.Name)
-		return nil
-	})
+	// 注册生命周期钩子
+	c.lifecycleHooks.RegisterHooks(c.boot, c.appType)
 
 	// 按顺序添加组件
 	c.infra = NewInfra(c.cfg)
@@ -142,4 +126,8 @@ func (c *Component) Shutdown() error {
 	}
 
 	return nil
+}
+
+func (c *Component) GetLifecycleHooks() LifecycleHooks {
+	return c.lifecycleHooks
 }
