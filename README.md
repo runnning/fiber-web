@@ -86,7 +86,7 @@
 │   ├── queue/           # 消息队列
 │   ├── server/          # HTTP 服务器
 │   ├── validator/       # 验证器
-│   ��── color/           # 颜色工具
+│   ├──color/           # 颜色工具
 │   ├── ctx/             # 上下文工具
 │   ├── query/           # 查询工具
 │   ├── response/        # 响应工具
