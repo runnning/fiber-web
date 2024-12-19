@@ -18,8 +18,6 @@ type Component interface {
 // Bootstrapper 管理应用程序初始化和生命周期
 type Bootstrapper struct {
 	components []Component
-	initFuncs  []func(context.Context) error
-	closeFuncs []func() error
 	hooks      struct {
 		beforeInit []LifecycleHook
 		afterInit  []LifecycleHook
@@ -33,8 +31,6 @@ type Bootstrapper struct {
 func New() *Bootstrapper {
 	return &Bootstrapper{
 		components: make([]Component, 0),
-		initFuncs:  make([]func(context.Context) error, 0),
-		closeFuncs: make([]func() error, 0),
 		hooks: struct {
 			beforeInit []LifecycleHook
 			afterInit  []LifecycleHook
@@ -54,18 +50,6 @@ func (b *Bootstrapper) AddComponent(c Component) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.components = append(b.components, c)
-}
-
-// Register 注册初始化和关闭函数
-func (b *Bootstrapper) Register(initFn func(context.Context) error, closeFn func() error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if initFn != nil {
-		b.initFuncs = append(b.initFuncs, initFn)
-	}
-	if closeFn != nil {
-		b.closeFuncs = append(b.closeFuncs, closeFn)
-	}
 }
 
 // AddHook 添加生命周期钩子
@@ -100,13 +84,6 @@ func (b *Bootstrapper) Bootstrap(ctx context.Context) error {
 	// 初始化组件
 	for _, component := range b.components {
 		if err := component.Init(ctx); err != nil {
-			return err
-		}
-	}
-
-	// 执行注册的初始化函数
-	for _, fn := range b.initFuncs {
-		if err := fn(ctx); err != nil {
 			return err
 		}
 	}
@@ -151,13 +128,6 @@ func (b *Bootstrapper) Shutdown() error {
 	// 逆序停止组件
 	for i := len(b.components) - 1; i >= 0; i-- {
 		if err := b.components[i].Stop(ctx); err != nil {
-			return err
-		}
-	}
-
-	// 逆序执行关闭函数
-	for i := len(b.closeFuncs) - 1; i >= 0; i-- {
-		if err := b.closeFuncs[i](); err != nil {
 			return err
 		}
 	}
