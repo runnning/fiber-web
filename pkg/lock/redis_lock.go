@@ -65,18 +65,26 @@ func (l *RedisLock) TryLock(ctx context.Context, key string, value any, ttl time
 
 // LockWithTimeout 在指定时间内尝试加锁
 func (l *RedisLock) LockWithTimeout(ctx context.Context, key string, value any, ttl time.Duration, timeout time.Duration) error {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
+	deadline := time.Now().Add(timeout)
 
-	ticker := time.NewTicker(defaultRetryInterval)
+	// 先尝试一次加锁
+	ok, err := l.TryLock(ctx, key, value, ttl)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+
+	// 使用动态重试间隔
+	retryInterval := defaultRetryInterval
+	ticker := time.NewTicker(retryInterval)
 	defer ticker.Stop()
 
-	for {
+	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-timer.C:
-			return ErrLockTimeout
 		case <-ticker.C:
 			ok, err := l.TryLock(ctx, key, value, ttl)
 			if err != nil {
@@ -85,8 +93,14 @@ func (l *RedisLock) LockWithTimeout(ctx context.Context, key string, value any, 
 			if ok {
 				return nil
 			}
+
+			// 动态调整重试间隔（可选）
+			retryInterval = min(retryInterval*2, timeout/10)
+			ticker.Reset(retryInterval)
 		}
 	}
+
+	return ErrLockTimeout
 }
 
 // Unlock 解锁
