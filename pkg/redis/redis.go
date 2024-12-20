@@ -17,31 +17,18 @@ var (
 	ErrNil = errors.New("redis: nil")
 )
 
-// Client wraps the Redis client
 type Client struct {
 	client *redis.Client
 }
 
-// Options Redis配置选项
-type Options struct {
-	Host         string
-	Port         int
-	Password     string
-	DB           int
-	PoolSize     int // 连接池大小
-	MinIdleConns int // 最小空闲连接数
-	MaxRetries   int // 最大重试次数
-}
-
-// NewClient creates a new Redis client
 func NewClient(cfg *config.Config) (*Client, error) {
 	opts := &redis.Options{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
 		Password:     cfg.Redis.Password,
 		DB:           cfg.Redis.DB,
-		PoolSize:     50, // 默认连接池大小
-		MinIdleConns: 10, // 最小空闲连接
-		MaxRetries:   3,  // 最大重试次数
+		PoolSize:     cfg.Redis.PoolSize,
+		MinIdleConns: cfg.Redis.MinIdleConns,
+		MaxRetries:   cfg.Redis.MaxRetries,
 	}
 
 	client := redis.NewClient(opts)
@@ -60,130 +47,156 @@ func NewClient(cfg *config.Config) (*Client, error) {
 
 // Set stores a key-value pair with expiration
 func (c *Client) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	jsonBytes, err := json.Marshal(value)
+	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("failed to marshal value: %w", err)
 	}
-
-	if err := c.client.Set(ctx, key, jsonBytes, expiration).Err(); err != nil {
-		return fmt.Errorf("redis set failed: %w", err)
-	}
-	return nil
+	return c.client.Set(ctx, key, data, expiration).Err()
 }
 
 // Get retrieves a value by key
 func (c *Client) Get(ctx context.Context, key string, value interface{}) error {
-	jsonStr, err := c.client.Get(ctx, key).Result()
+	data, err := c.client.Get(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return ErrNil
+	}
 	if err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal([]byte(jsonStr), value); err != nil {
-		return fmt.Errorf("failed to unmarshal value: %w", err)
-	}
-	return nil
+	return json.Unmarshal(data, value)
 }
 
-// Delete removes keys
+// Delete 基础操作方法
 func (c *Client) Delete(ctx context.Context, keys ...string) error {
-	if err := c.client.Del(ctx, keys...).Err(); err != nil {
-		return fmt.Errorf("redis delete failed: %w", err)
-	}
-	return nil
+	return c.client.Del(ctx, keys...).Err()
 }
 
-// Exists checks if keys exist
 func (c *Client) Exists(ctx context.Context, keys ...string) (bool, error) {
 	n, err := c.client.Exists(ctx, keys...).Result()
+	return n > 0, err
+}
+
+// HSet Hash 操作
+func (c *Client) HSet(ctx context.Context, key string, field string, value interface{}) error {
+	data, err := json.Marshal(value)
 	if err != nil {
-		return false, fmt.Errorf("redis exists failed: %w", err)
+		return fmt.Errorf("failed to marshal value: %w", err)
 	}
-	return n > 0, nil
+	return c.client.HSet(ctx, key, field, data).Err()
 }
 
-// Increment  increments the key
-func (c *Client) Increment(ctx context.Context, key string) (int64, error) {
-	val, err := c.client.Incr(ctx, key).Result()
-	if err != nil {
-		return 0, fmt.Errorf("redis incr failed: %w", err)
-	}
-	return val, nil
-}
-
-// SetNX sets a key-value pair if the key doesn't exist
-func (c *Client) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
-	ok, err := c.client.SetNX(ctx, key, value, expiration).Result()
-	if err != nil {
-		return false, fmt.Errorf("redis setnx failed: %w", err)
-	}
-	return ok, nil
-}
-
-// Eval executes a Lua script
-func (c *Client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
-	return c.client.Eval(ctx, script, keys, args...)
-}
-
-// Pipeline 创建管道
-func (c *Client) Pipeline() redis.Pipeliner {
-	return c.client.Pipeline()
-}
-
-// Watch 监视keys的变化
-func (c *Client) Watch(ctx context.Context, fn func(tx *redis.Tx) error, keys ...string) error {
-	return c.client.Watch(ctx, fn, keys...)
-}
-
-// Close closes the Redis connection
-func (c *Client) Close() error {
-	if err := c.client.Close(); err != nil {
-		return fmt.Errorf("redis close failed: %w", err)
-	}
-	return nil
-}
-
-// HSet sets hash fields
-func (c *Client) HSet(ctx context.Context, key string, values ...interface{}) error {
-	if err := c.client.HSet(ctx, key, values...).Err(); err != nil {
-		return fmt.Errorf("redis hset failed: %w", err)
-	}
-	return nil
-}
-
-// HGet gets hash field
-func (c *Client) HGet(ctx context.Context, key, field string) (string, error) {
-	val, err := c.client.HGet(ctx, key, field).Result()
+func (c *Client) HGet(ctx context.Context, key, field string, value interface{}) error {
+	data, err := c.client.HGet(ctx, key, field).Bytes()
 	if errors.Is(err, redis.Nil) {
-		return "", ErrNil
+		return ErrNil
 	}
 	if err != nil {
-		return "", fmt.Errorf("redis hget failed: %w", err)
+		return err
 	}
-	return val, nil
+
+	return json.Unmarshal(data, value)
 }
 
-// HGetAll gets all fields and values in a hash
-func (c *Client) HGetAll(ctx context.Context, key string) (map[string]string, error) {
-	val, err := c.client.HGetAll(ctx, key).Result()
+// Lock 分布式锁
+func (c *Client) Lock(ctx context.Context, key string, expiration time.Duration) (bool, error) {
+	value := fmt.Sprintf("%d", time.Now().UnixNano())
+	return c.client.SetNX(ctx, key, value, expiration).Result()
+}
+
+func (c *Client) Unlock(ctx context.Context, key string) error {
+	return c.Delete(ctx, key)
+}
+
+func (c *Client) Close() error {
+	return c.client.Close()
+}
+
+// LPush List 操作
+func (c *Client) LPush(ctx context.Context, key string, values ...interface{}) error {
+	for i, v := range values {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("failed to marshal value at index %d: %w", i, err)
+		}
+		values[i] = data
+	}
+	return c.client.LPush(ctx, key, values...).Err()
+}
+
+func (c *Client) RPush(ctx context.Context, key string, values ...interface{}) error {
+	for i, v := range values {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("failed to marshal value at index %d: %w", i, err)
+		}
+		values[i] = data
+	}
+	return c.client.RPush(ctx, key, values...).Err()
+}
+
+func (c *Client) LPop(ctx context.Context, key string, value interface{}) error {
+	data, err := c.client.LPop(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return ErrNil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("redis hgetall failed: %w", err)
+		return err
 	}
-	return val, nil
+	return json.Unmarshal(data, value)
 }
 
-// Expire sets key expiration
-func (c *Client) Expire(ctx context.Context, key string, expiration time.Duration) error {
-	if err := c.client.Expire(ctx, key, expiration).Err(); err != nil {
-		return fmt.Errorf("redis expire failed: %w", err)
+func (c *Client) RPop(ctx context.Context, key string, value interface{}) error {
+	data, err := c.client.RPop(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return ErrNil
 	}
-	return nil
-}
-
-// TTL gets key time to live
-func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
-	ttl, err := c.client.TTL(ctx, key).Result()
 	if err != nil {
-		return 0, fmt.Errorf("redis ttl failed: %w", err)
+		return err
 	}
-	return ttl, nil
+	return json.Unmarshal(data, value)
+}
+
+// SAdd Set 集合操作
+func (c *Client) SAdd(ctx context.Context, key string, members ...interface{}) error {
+	for i, m := range members {
+		data, err := json.Marshal(m)
+		if err != nil {
+			return fmt.Errorf("failed to marshal member at index %d: %w", i, err)
+		}
+		members[i] = data
+	}
+	return c.client.SAdd(ctx, key, members...).Err()
+}
+
+func (c *Client) SMembers(ctx context.Context, key string) ([]string, error) {
+	return c.client.SMembers(ctx, key).Result()
+}
+
+func (c *Client) SPop(ctx context.Context, key string, value interface{}) error {
+	data, err := c.client.SPop(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return ErrNil
+	}
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, value)
+}
+
+// ZAdd Sorted Set 操作
+func (c *Client) ZAdd(ctx context.Context, key string, score float64, member interface{}) error {
+	data, err := json.Marshal(member)
+	if err != nil {
+		return fmt.Errorf("failed to marshal member: %w", err)
+	}
+	z := redis.Z{
+		Score:  score,
+		Member: data,
+	}
+	return c.client.ZAdd(ctx, key, z).Err()
+}
+
+func (c *Client) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	return c.client.ZRange(ctx, key, start, stop).Result()
 }

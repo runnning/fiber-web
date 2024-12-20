@@ -14,6 +14,9 @@ redis:
   port: 6379
   password: ""
   db: 0
+  poolSize: 50
+  minIdleConns: 10
+  maxRetries: 3
 
 nsq:
   nsqd:

@@ -33,10 +33,13 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Host         string
+	Port         int
+	Password     string
+	DB           int
+	PoolSize     int // 连接池大小
+	MinIdleConns int // 最小空闲连接数
+	MaxRetries   int // 最大重试次数
 }
 
 type NSQConfig struct {
