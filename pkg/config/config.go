@@ -25,11 +25,14 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	DBName   string `mapstructure:"dbname"`
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	User            string        `mapstructure:"user"`
+	Password        string        `mapstructure:"password"`
+	DBName          string        `mapstructure:"dbname"`
+	MaxIdleConns    int           `mapstructure:"max_idle_conns"`    // 最大空闲连接数
+	MaxOpenConns    int           `mapstructure:"max_open_conns"`    // 最大打开连接数
+	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"` // 连接最大生命周期
 }
 
 type RedisConfig struct {
@@ -113,6 +116,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("jwt.secret_key", "secret")
 	viper.SetDefault("jwt.access_token_expiry", 15*time.Minute)
 	viper.SetDefault("jwt.refresh_token_expiry", 7*24*time.Hour)
+	viper.SetDefault("database.max_idle_conns", 10)
+	viper.SetDefault("database.max_open_conns", 100)
+	viper.SetDefault("database.conn_max_lifetime", time.Hour)
 
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError

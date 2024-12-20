@@ -4,7 +4,6 @@ import (
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/logger"
 	"fmt"
-	"time"
 
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -47,9 +46,9 @@ func NewMySQL(cfg *config.Config) (*Database, error) {
 	}
 
 	// Set connection pool settings
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
 
 	// Test the connection
 	if err := sqlDB.Ping(); err != nil {

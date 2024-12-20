@@ -8,6 +8,9 @@ database:
   user: "root"
   password: "root"
   dbname: "fiber_web"
+  max_idle_conns: 10      # 最大空闲连接数
+  max_open_conns: 100     # 最大打开连接数
+  conn_max_lifetime: "1h" # 连接最大生命周期
 
 redis:
   host: "redis"

@@ -8,6 +8,9 @@ database:
   user: "root"
   password: "root"
   dbname: "fiber_web"
+  max_idle_conns: 10
+  max_open_conns: 100
+  conn_max_lifetime: "1h"
 
 redis:
   host: "localhost"
