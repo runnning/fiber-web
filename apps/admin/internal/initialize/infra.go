@@ -2,6 +2,7 @@ package initialize
 
 import (
 	"context"
+	"fiber_web/pkg/auth"
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/cron"
 	"fiber_web/pkg/database"
@@ -64,6 +65,12 @@ func (i *Infra) Init(ctx context.Context) error {
 	}
 	i.NSQ = producer
 	i.Logger.Info("NSQ initialized")
+
+	// 初始化权限
+	if _, err = auth.InitRbac(i.DB.DB()); err != nil {
+		return err
+	}
+	i.Logger.Info("RBAC initialized")
 
 	// 启动 Cron
 	i.Cron = cron.NewScheduler(logger.GetLogger())

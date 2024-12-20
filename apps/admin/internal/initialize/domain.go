@@ -4,7 +4,6 @@ import (
 	"context"
 	"fiber_web/apps/admin/internal/repository"
 	"fiber_web/apps/admin/internal/usecase"
-	"fiber_web/pkg/auth"
 	"sync"
 )
 
@@ -40,12 +39,6 @@ func (d *Domain) Init(ctx context.Context) error {
 	// 初始化用例层
 	d.Uses.User = usecase.NewUserUseCase(d.Repos.User)
 	d.infra.Logger.Info("UseCases initialized")
-
-	// 初始化权限
-	if _, err := auth.InitRbac(d.infra.DB.DB()); err != nil {
-		return err
-	}
-	d.infra.Logger.Info("RBAC initialized")
 
 	return nil
 }
