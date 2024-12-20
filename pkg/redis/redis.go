@@ -200,3 +200,18 @@ func (c *Client) ZAdd(ctx context.Context, key string, score float64, member int
 func (c *Client) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	return c.client.ZRange(ctx, key, start, stop).Result()
 }
+
+// Eval executes a Lua script
+func (c *Client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
+	return c.client.Eval(ctx, script, keys, args...)
+}
+
+// Expire sets key expiration
+func (c *Client) Expire(ctx context.Context, key string, expiration time.Duration) error {
+	return c.client.Expire(ctx, key, expiration).Err()
+}
+
+// TTL gets key time to live
+func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
+	return c.client.TTL(ctx, key).Result()
+}
