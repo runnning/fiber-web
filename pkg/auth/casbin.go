@@ -42,7 +42,7 @@ var (
 )
 
 // InitRbac 初始化 Casbin enforcer
-func InitRbac(db *gorm.DB) (*Enforcer, error) {
+func InitRbac(db *gorm.DB) error {
 	var initErr error
 	once.Do(func() {
 		instance = &Enforcer{}
@@ -85,10 +85,9 @@ func InitRbac(db *gorm.DB) (*Enforcer, error) {
 	})
 
 	if initErr != nil {
-		return nil, fmt.Errorf("failed to initialize Casbin: %w", initErr)
+		return fmt.Errorf("failed to initialize Casbin: %w", initErr)
 	}
-
-	return instance, nil
+	return nil
 }
 
 // addDefaultPolicies 添加默认的 RBAC 策略

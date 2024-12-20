@@ -67,7 +67,7 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("NSQ initialized")
 
 	// 初始化权限
-	if _, err = auth.InitRbac(i.DB.DB()); err != nil {
+	if err = auth.InitRbac(i.DB.DB()); err != nil {
 		return err
 	}
 	i.Logger.Info("RBAC initialized")
