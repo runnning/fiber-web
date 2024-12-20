@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/logger"
@@ -59,22 +60,28 @@ func NewClient(cfg *config.Config) (*Client, error) {
 
 // Set stores a key-value pair with expiration
 func (c *Client) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	if err := c.client.Set(ctx, key, value, expiration).Err(); err != nil {
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal value: %w", err)
+	}
+
+	if err := c.client.Set(ctx, key, jsonBytes, expiration).Err(); err != nil {
 		return fmt.Errorf("redis set failed: %w", err)
 	}
 	return nil
 }
 
 // Get retrieves a value by key
-func (c *Client) Get(ctx context.Context, key string) (string, error) {
-	val, err := c.client.Get(ctx, key).Result()
-	if errors.Is(err, redis.Nil) {
-		return "", ErrNil
-	}
+func (c *Client) Get(ctx context.Context, key string, value interface{}) error {
+	jsonStr, err := c.client.Get(ctx, key).Result()
 	if err != nil {
-		return "", fmt.Errorf("redis get failed: %w", err)
+		return err
 	}
-	return val, nil
+
+	if err := json.Unmarshal([]byte(jsonStr), value); err != nil {
+		return fmt.Errorf("failed to unmarshal value: %w", err)
+	}
+	return nil
 }
 
 // Delete removes keys
@@ -94,8 +101,8 @@ func (c *Client) Exists(ctx context.Context, keys ...string) (bool, error) {
 	return n > 0, nil
 }
 
-// Incr increments the key
-func (c *Client) Incr(ctx context.Context, key string) (int64, error) {
+// Increment  increments the key
+func (c *Client) Increment(ctx context.Context, key string) (int64, error) {
 	val, err := c.client.Incr(ctx, key).Result()
 	if err != nil {
 		return 0, fmt.Errorf("redis incr failed: %w", err)
