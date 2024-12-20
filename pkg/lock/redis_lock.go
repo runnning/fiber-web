@@ -19,6 +19,22 @@ type RedisLock struct {
 	client *redisClient.Client
 }
 
+const (
+	lockScript = `
+		if redis.call("exists", KEYS[1]) == 0 then
+			return redis.call("set", KEYS[1], ARGV[1], "PX", ARGV[2])
+		end
+		return false`
+
+	unlockScript = `
+		if redis.call("exists", KEYS[1]) == 1 then
+			return redis.call("del", KEYS[1])
+		end
+		return false`
+)
+
+const defaultRetryInterval = 100 * time.Millisecond
+
 // NewRedisLock 创建Redis分布式锁
 func NewRedisLock(client *redisClient.Client) Lock {
 	return &RedisLock{
@@ -28,18 +44,11 @@ func NewRedisLock(client *redisClient.Client) Lock {
 
 // Lock 加锁
 func (l *RedisLock) Lock(ctx context.Context, key string, value any, ttl time.Duration) error {
-	script := `
-		if redis.call("exists", KEYS[1]) == 0 then
-			return redis.call("set", KEYS[1], ARGV[1], "PX", ARGV[2])
-		end
-		return false`
-
-	result, err := l.client.Eval(ctx, script, []string{key}, value, ttl.Milliseconds()).Result()
+	ok, err := l.TryLock(ctx, key, value, ttl)
 	if err != nil {
-		logger.Error("Lock failed", zap.String("key", key), zap.Error(err))
 		return err
 	}
-	if result == false {
+	if !ok {
 		return ErrLockFailed
 	}
 	return nil
@@ -47,16 +56,9 @@ func (l *RedisLock) Lock(ctx context.Context, key string, value any, ttl time.Du
 
 // TryLock 尝试加锁
 func (l *RedisLock) TryLock(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
-	script := `
-		if redis.call("exists", KEYS[1]) == 0 then
-			return redis.call("set", KEYS[1], ARGV[1], "PX", ARGV[2])
-		end
-		return false`
-
-	result, err := l.client.Eval(ctx, script, []string{key}, value, ttl.Milliseconds()).Result()
+	result, err := l.client.Eval(ctx, lockScript, []string{key}, value, ttl.Milliseconds()).Result()
 	if err != nil {
-		logger.Error("TryLock failed", zap.String("key", key), zap.Error(err))
-		return false, err
+		return false, l.handleError("TryLock", key, err)
 	}
 	return result != false, nil
 }
@@ -66,7 +68,7 @@ func (l *RedisLock) LockWithTimeout(ctx context.Context, key string, value any, 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(defaultRetryInterval)
 	defer ticker.Stop()
 
 	for {
@@ -89,35 +91,30 @@ func (l *RedisLock) LockWithTimeout(ctx context.Context, key string, value any, 
 
 // Unlock 解锁
 func (l *RedisLock) Unlock(ctx context.Context, key string) error {
-	script := `
-		if redis.call("exists", KEYS[1]) == 1 then
-			return redis.call("del", KEYS[1])
-		end
-		return false`
-
-	_, err := l.client.Eval(ctx, script, []string{key}).Result()
-	if err != nil {
-		logger.Error("Unlock failed", zap.String("key", key), zap.Error(err))
-	}
-	return err
+	_, err := l.client.Eval(ctx, unlockScript, []string{key}).Result()
+	return l.handleError("Unlock", key, err)
 }
 
 // Refresh 刷新锁的过期时间
 func (l *RedisLock) Refresh(ctx context.Context, key string, ttl time.Duration) error {
 	err := l.client.Expire(ctx, key, ttl)
-	if err != nil {
-		logger.Error("Refresh lock failed", zap.String("key", key), zap.Error(err))
-		return err
-	}
-	return nil
+	return l.handleError("Refresh", key, err)
 }
 
 // GetLockTTL 获取锁的剩余过期时间
 func (l *RedisLock) GetLockTTL(ctx context.Context, key string) (time.Duration, error) {
 	ttl, err := l.client.TTL(ctx, key)
 	if err != nil {
-		logger.Error("Get lock TTL failed", zap.String("key", key), zap.Error(err))
-		return 0, err
+		return 0, l.handleError("GetLockTTL", key, err)
 	}
 	return ttl, nil
+}
+
+func (l *RedisLock) handleError(operation string, key string, err error) error {
+	if err != nil {
+		logger.Error(operation+" failed",
+			zap.String("key", key),
+			zap.Error(err))
+	}
+	return err
 }
