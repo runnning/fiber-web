@@ -36,7 +36,7 @@ func (i *Infra) Init(ctx context.Context) error {
 	defer i.mu.Unlock()
 
 	// 初始化日志
-	if err := logger.InitLogger(i.Config.App.Env); err != nil {
+	if err := logger.InitLogger(&i.Config.Log); err != nil {
 		return err
 	}
 	i.Logger = logger.GetDefaultLogger()

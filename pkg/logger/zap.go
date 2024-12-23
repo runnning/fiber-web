@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"fiber_web/pkg/config"
 
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
@@ -19,12 +22,10 @@ type Logger struct {
 var defaultLogger *Logger
 
 // NewLogger creates a new logger instance
-func NewLogger(env string) (*Logger, error) {
-	var config zap.Config
-
+func NewLogger(cfg *config.LogConfig) (*Logger, error) {
 	// Ensure logs directory exists
-	if err := os.MkdirAll("logs", 0755); err != nil {
-		return nil, fmt.Errorf("can't create log directory: %v", err)
+	if err := os.MkdirAll(cfg.Directory, 0755); err != nil {
+		return nil, fmt.Errorf("can't create log directory: %w", err)
 	}
 
 	// Create encoder config
@@ -43,68 +44,55 @@ func NewLogger(env string) (*Logger, error) {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// Set different configs based on environment
-	if env == "development" {
-		config = zap.NewDevelopmentConfig()
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	} else {
-		config = zap.NewProductionConfig()
+	// Parse log level
+	level, err := zapcore.ParseLevel(cfg.Level)
+	if err != nil {
+		level = zapcore.InfoLevel
 	}
 
-	config.EncoderConfig = encoderConfig
-
-	// Create core with file and console output
-	currentTime := time.Now().Format("2006-01-02")
-	logFile := filepath.Join("logs", fmt.Sprintf("%s.log", currentTime))
+	// Set log file path
+	currentTime := time.Now()
+	logFile := filepath.Join(cfg.Directory,
+		strings.Replace(cfg.Filename, "%Y-%m-%d", currentTime.Format("2006-01-02"), -1))
 
 	// Set up lumberjack for log rotation
 	logWriter := &lumberjack.Logger{
 		Filename:   logFile,
-		MaxSize:    1,    // megabytes
-		MaxBackups: 3,    // number of backups
-		MaxAge:     28,   // days
-		Compress:   true, // compress the backups
+		MaxSize:    cfg.MaxSize,
+		MaxBackups: cfg.MaxBackups,
+		MaxAge:     cfg.MaxAge,
+		Compress:   cfg.Compress,
 	}
-
-	// Open log files
-	// file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("can't open log file: %v", err)
-	// }
 
 	// Create cores
-	cores := []zapcore.Core{
-		zapcore.NewCore(
-			zapcore.NewJSONEncoder(config.EncoderConfig),
-			zapcore.AddSync(logWriter),
-			config.Level,
-		),
-		// zapcore.NewCore(
-		// 	zapcore.NewJSONEncoder(config.EncoderConfig),
-		// 	zapcore.AddSync(file),
-		// 	zapcore.DebugLevel,
-		// ),
-	}
+	var cores []zapcore.Core
 
-	// Add console output in development
-	if env == "development" {
+	// File output
+	cores = append(cores, zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		zapcore.AddSync(logWriter),
+		level,
+	))
+
+	// Console output
+	if cfg.Console {
 		cores = append(cores, zapcore.NewCore(
-			zapcore.NewConsoleEncoder(config.EncoderConfig),
+			zapcore.NewConsoleEncoder(encoderConfig),
 			zapcore.AddSync(os.Stdout),
-			config.Level,
+			level,
 		))
 	}
 
 	// Create logger
 	core := zapcore.NewTee(cores...)
-	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel))
+	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 
 	return &Logger{log: logger}, nil
 }
 
 // InitLogger initializes the default logger
-func InitLogger(env string) error {
-	logger, err := NewLogger(env)
+func InitLogger(cfg *config.LogConfig) error {
+	logger, err := NewLogger(cfg)
 	if err != nil {
 		return err
 	}

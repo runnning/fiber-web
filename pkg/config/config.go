@@ -17,6 +17,7 @@ type Config struct {
 	NSQ      NSQConfig      `mapstructure:"nsq"`
 	App      AppConfig      `mapstructure:"app"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
+	Log      LogConfig      `mapstructure:"log"`
 }
 
 type ServerConfig struct {
@@ -80,6 +81,17 @@ type JWTConfig struct {
 	RefreshTokenExpiry time.Duration `mapstructure:"refresh_token_expiry"`
 }
 
+type LogConfig struct {
+	Level      string `mapstructure:"level"`       // 日志级别
+	Directory  string `mapstructure:"directory"`   // 日志目录
+	Filename   string `mapstructure:"filename"`    // 日志文件名
+	MaxSize    int    `mapstructure:"max_size"`    // 单个文件最大大小(MB)
+	MaxBackups int    `mapstructure:"max_backups"` // 最大备份数
+	MaxAge     int    `mapstructure:"max_age"`     // 最大保留天数
+	Compress   bool   `mapstructure:"compress"`    // 是否压缩
+	Console    bool   `mapstructure:"console"`     // 是否输出到控制台
+}
+
 func Load() (*Config, error) {
 	configName := os.Getenv("CONFIG_NAME")
 	if configName == "" {
@@ -113,7 +125,7 @@ func Load() (*Config, error) {
 
 	viper.AutomaticEnv()
 
-	// 设置默认值保持不变
+	// 设置默���值保持不变
 	viper.SetDefault("server.address", ":3000")
 	viper.SetDefault("server.port", 3000)
 	viper.SetDefault("app.env", "development")
@@ -134,6 +146,14 @@ func Load() (*Config, error) {
 	viper.SetDefault("database.max_idle_conns", 10)
 	viper.SetDefault("database.max_open_conns", 100)
 	viper.SetDefault("database.conn_max_lifetime", time.Hour)
+	viper.SetDefault("log.level", "info")
+	viper.SetDefault("log.directory", "./logs")
+	viper.SetDefault("log.filename", "fiber-web.log")
+	viper.SetDefault("log.max_size", 10)
+	viper.SetDefault("log.max_backups", 5)
+	viper.SetDefault("log.max_age", 30)
+	viper.SetDefault("log.compress", true)
+	viper.SetDefault("log.console", true)
 
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError

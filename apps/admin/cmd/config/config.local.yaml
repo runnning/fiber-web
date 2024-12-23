@@ -43,7 +43,7 @@ redis:
     pool_size: 50
     min_idle_conns: 10
     max_retries: 3
-  instances:              # 多实例配置(仅在 multi_instance: true 时生效)
+  instances:              # 多实例配置(仅在 multi_instance: true ���生效)
     default:
       host: "localhost"
       port: 6379
@@ -78,3 +78,13 @@ jwt:
   secret_key: "your-secret-key-here"
   access_token_expiry: "15m"
   refresh_token_expiry: "168h" 
+
+log:
+  level: "debug"
+  directory: "logs"
+  filename: "%Y-%m-%d.log"  # 支持时间格式化
+  max_size: 1              # 1MB
+  max_backups: 3
+  max_age: 28             # 28天
+  compress: true
+  console: true           # 开发环境输出到控制台

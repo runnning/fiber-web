@@ -78,3 +78,13 @@ jwt:
   secret_key: "your-secret-key-here"
   access_token_expiry: "15m"
   refresh_token_expiry: "168h" 
+
+log:
+  level: "info"
+  directory: "/var/log/fiber-web"
+  filename: "%Y-%m-%d.log"
+  max_size: 10           # 10MB
+  max_backups: 5
+  max_age: 30           # 30天
+  compress: true
+  console: false        # 生产环境不输出到控制台
