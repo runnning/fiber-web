@@ -95,7 +95,7 @@ func (m *DBManager) GetDB(name string) (*Database, error) {
 	return db, nil
 }
 
-// Close ���闭所有数据库连接
+// Close 关闭闭所有数据库连接
 func (m *DBManager) Close() error {
 	var errs []error
 	for name, db := range m.dbs {
@@ -109,7 +109,7 @@ func (m *DBManager) Close() error {
 	return nil
 }
 
-// Database 方法保持不变
+// DB 方法保持不变
 func (d *Database) DB() *gorm.DB {
 	return d.db
 }
