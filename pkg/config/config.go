@@ -125,7 +125,7 @@ func Load() (*Config, error) {
 
 	viper.AutomaticEnv()
 
-	// 设置默���值保持不变
+	// 设置默认值保持不变
 	viper.SetDefault("server.address", ":3000")
 	viper.SetDefault("server.port", 3000)
 	viper.SetDefault("app.env", "development")
