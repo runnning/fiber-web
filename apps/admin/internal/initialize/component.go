@@ -50,7 +50,7 @@ func (c *Component) Initialize(ctx context.Context) error {
 		server.WithEnv(c.cfg.App.Env),
 		server.WithAppName(c.cfg.App.Name),
 		server.WithServerHeader("Fiber"),
-		server.WithBodyLimit(4*1024*1024),
+		server.WithBodyLimit(4>>20),
 		server.WithDisableStartupMessage(false),
 	)
 
