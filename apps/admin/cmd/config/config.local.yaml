@@ -3,23 +3,63 @@ server:
   port: 3000
 
 database:
-  host: "localhost"
-  port: 3306
-  user: "root"
-  password: "root"
-  dbname: "fiber_web"
-  max_idle_conns: 10
-  max_open_conns: 100
-  conn_max_lifetime: "1h"
+  multi_db: false    # 默认使用单库模式
+  default:           # 单库配置
+    host: "localhost"
+    port: 3306
+    user: "root"
+    password: "root"
+    dbname: "fiber_web"
+    max_idle_conns: 10
+    max_open_conns: 100
+    conn_max_lifetime: "1h"
+  databases:         # 多库配置(仅在 multi_db: true 时生效)
+    default:
+      host: "localhost"
+      port: 3306
+      user: "root"
+      password: "root"
+      dbname: "fiber_web"
+      max_idle_conns: 10
+      max_open_conns: 100
+      conn_max_lifetime: "1h"
+    read:
+      host: "localhost"
+      port: 3306
+      user: "readonly"
+      password: "readonly"
+      dbname: "fiber_web"
+      max_idle_conns: 10
+      max_open_conns: 100
+      conn_max_lifetime: "1h"
 
 redis:
-  host: "localhost"
-  port: 6379
-  password: ""
-  db: 0
-  poolSize: 50
-  minIdleConns: 10
-  maxRetries: 3
+  multi_instance: false    # 默认使用单实例模式
+  default:                # 单实例配置
+    host: "localhost"
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 50
+    min_idle_conns: 10
+    max_retries: 3
+  instances:              # 多实例配置(仅在 multi_instance: true 时生效)
+    default:
+      host: "localhost"
+      port: 6379
+      password: ""
+      db: 0
+      pool_size: 50
+      min_idle_conns: 10
+      max_retries: 3
+    cache:
+      host: "localhost"
+      port: 6379
+      password: ""
+      db: 1
+      pool_size: 50
+      min_idle_conns: 10
+      max_retries: 3
 
 nsq:
   nsqd:

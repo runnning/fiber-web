@@ -2,28 +2,58 @@ package database
 
 import (
 	"fiber_web/pkg/config"
-	"fiber_web/pkg/logger"
 	"fmt"
 
-	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
-// Database wraps the database connection
+// DBManager 管理多个数据库连接
+type DBManager struct {
+	dbs map[string]*Database
+}
+
+// Database 包装单个数据库连接
 type Database struct {
 	db *gorm.DB
 }
 
-// NewMySQL creates a new MySQL database connection
-func NewMySQL(cfg *config.Config) (*Database, error) {
+// NewDBManager 创建数据库管理器
+func NewDBManager(cfg *config.Config) (*DBManager, error) {
+	manager := &DBManager{
+		dbs: make(map[string]*Database),
+	}
+
+	if cfg.Database.MultiDB {
+		// 多库模式
+		for name, dbConfig := range cfg.Database.Databases {
+			db, err := newDatabase(&dbConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create database %s: %w", name, err)
+			}
+			manager.dbs[name] = db
+		}
+	} else {
+		// 单库模式
+		db, err := newDatabase(&cfg.Database.Default)
+		if err != nil {
+			return nil, err
+		}
+		manager.dbs["default"] = db
+	}
+
+	return manager, nil
+}
+
+// newDatabase 创建单个数据库连接
+func newDatabase(cfg *config.DBConfig) (*Database, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.DBName,
+		cfg.User,
+		cfg.Password,
+		cfg.Host,
+		cfg.Port,
+		cfg.DBName,
 	)
 
 	gormConfig := &gorm.Config{
@@ -35,57 +65,71 @@ func NewMySQL(cfg *config.Config) (*Database, error) {
 
 	db, err := gorm.Open(mysql.Open(dsn), gormConfig)
 	if err != nil {
-		logger.Error("Failed to connect to database", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		logger.Error("Failed to get database instance", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	// Set connection pool settings
-	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
-	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
-	sqlDB.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
+	// 设置连接池
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 
-	// Test the connection
+	// 测试连接
 	if err := sqlDB.Ping(); err != nil {
-		logger.Error("Failed to ping database", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	logger.Info("Successfully connected to database")
 	return &Database{db: db}, nil
 }
 
-// DB returns the underlying database connection
+// GetDB 获取指定名称的数据库连接
+func (m *DBManager) GetDB(name string) (*Database, error) {
+	db, exists := m.dbs[name]
+	if !exists {
+		return nil, fmt.Errorf("database %s not found", name)
+	}
+	return db, nil
+}
+
+// Close ���闭所有数据库连接
+func (m *DBManager) Close() error {
+	var errs []error
+	for name, db := range m.dbs {
+		if err := db.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close database %s: %w", name, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing databases: %v", errs)
+	}
+	return nil
+}
+
+// Database 方法保持不变
 func (d *Database) DB() *gorm.DB {
 	return d.db
 }
 
-// AutoMigrate runs auto migration for given models
 func (d *Database) AutoMigrate(models ...interface{}) error {
 	return d.db.AutoMigrate(models...)
 }
 
-// Begin starts a new transaction
 func (d *Database) Begin() *gorm.DB {
 	return d.db.Begin()
 }
 
-// Commit commits the current transaction
 func (d *Database) Commit() *gorm.DB {
 	return d.db.Commit()
 }
 
-// Rollback rollbacks the current transaction
 func (d *Database) Rollback() *gorm.DB {
 	return d.db.Rollback()
 }
 
-// Close closes the database connection
 func (d *Database) Close() error {
 	sqlDB, err := d.db.DB()
 	if err != nil {

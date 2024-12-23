@@ -3,23 +3,63 @@ server:
   port: 3000
 
 database:
-  host: "mysql"
-  port: 3306
-  user: "root"
-  password: "root"
-  dbname: "fiber_web"
-  max_idle_conns: 10      # 最大空闲连接数
-  max_open_conns: 100     # 最大打开连接数
-  conn_max_lifetime: "1h" # 连接最大生命周期
+  multi_db: false
+  default:
+    host: "mysql"
+    port: 3306
+    user: "root"
+    password: "root"
+    dbname: "fiber_web"
+    max_idle_conns: 10
+    max_open_conns: 100
+    conn_max_lifetime: "1h"
+  databases:
+    default:
+      host: "mysql"
+      port: 3306
+      user: "root"
+      password: "root"
+      dbname: "fiber_web"
+      max_idle_conns: 10
+      max_open_conns: 100
+      conn_max_lifetime: "1h"
+    read:
+      host: "mysql-read"
+      port: 3306
+      user: "readonly"
+      password: "readonly"
+      dbname: "fiber_web"
+      max_idle_conns: 10
+      max_open_conns: 100
+      conn_max_lifetime: "1h"
 
 redis:
-  host: "redis"
-  port: 6379
-  password: ""
-  db: 0
-  poolSize: 50
-  minIdleConns: 10
-  maxRetries: 3
+  multi_instance: false
+  default:
+    host: "redis"
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 50
+    min_idle_conns: 10
+    max_retries: 3
+  instances:
+    default:
+      host: "redis"
+      port: 6379
+      password: ""
+      db: 0
+      pool_size: 50
+      min_idle_conns: 10
+      max_retries: 3
+    cache:
+      host: "redis-cache"
+      port: 6379
+      password: ""
+      db: 1
+      pool_size: 50
+      min_idle_conns: 10
+      max_retries: 3
 
 nsq:
   nsqd:

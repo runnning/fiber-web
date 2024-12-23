@@ -18,8 +18,8 @@ import (
 // Infra 基础设施
 type Infra struct {
 	Config *config.Config
-	DB     *database.Database
-	Redis  *redis.Client
+	DB     *database.DBManager
+	Redis  *redis.RedisManager
 	NSQ    *queue.Producer
 	Logger *logger.Logger
 	Cron   *cron.Scheduler
@@ -43,19 +43,19 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("Logger initialized")
 
 	// 初始化数据库
-	db, err := database.NewMySQL(i.Config)
+	dbManager, err := database.NewDBManager(i.Config)
 	if err != nil {
 		return err
 	}
-	i.DB = db
+	i.DB = dbManager
 	i.Logger.Info("Database initialized")
 
 	// 初始化 Redis
-	redis, err := redis.NewClient(i.Config)
+	redisManager, err := redis.NewRedisManager(i.Config)
 	if err != nil {
 		return err
 	}
-	i.Redis = redis
+	i.Redis = redisManager
 	i.Logger.Info("Redis initialized")
 
 	// 初始化 NSQ
@@ -67,7 +67,11 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("NSQ initialized")
 
 	// 初始化权限
-	if err = auth.InitRbac(i.DB.DB()); err != nil {
+	defaultDB, err := i.DB.GetDB("default")
+	if err != nil {
+		return err
+	}
+	if err = auth.InitRbac(defaultDB.DB()); err != nil {
 		return err
 	}
 	i.Logger.Info("RBAC initialized")

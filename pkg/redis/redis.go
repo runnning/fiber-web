@@ -5,30 +5,62 @@ import (
 	"encoding/json"
 	"errors"
 	"fiber_web/pkg/config"
-	"fiber_web/pkg/logger"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 var (
 	ErrNil = errors.New("redis: nil")
 )
 
+// RedisManager 管理多个Redis实例
+type RedisManager struct {
+	clients map[string]*Client
+}
+
+// Client 包装Redis客户端
 type Client struct {
 	client *redis.Client
 }
 
-func NewClient(cfg *config.Config) (*Client, error) {
+// NewRedisManager 创建Redis管理器
+func NewRedisManager(cfg *config.Config) (*RedisManager, error) {
+	manager := &RedisManager{
+		clients: make(map[string]*Client),
+	}
+
+	if cfg.Redis.MultiInstance {
+		// 多实例模式
+		for name, redisConfig := range cfg.Redis.Instances {
+			client, err := newRedisClient(&redisConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create redis client %s: %w", name, err)
+			}
+			manager.clients[name] = client
+		}
+	} else {
+		// 单实例模式
+		client, err := newRedisClient(&cfg.Redis.Default)
+		if err != nil {
+			return nil, err
+		}
+		manager.clients["default"] = client
+	}
+
+	return manager, nil
+}
+
+// newRedisClient 创建单个Redis客户端
+func newRedisClient(cfg *config.RedisInstanceConfig) (*Client, error) {
 	opts := &redis.Options{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
-		Password:     cfg.Redis.Password,
-		DB:           cfg.Redis.DB,
-		PoolSize:     cfg.Redis.PoolSize,
-		MinIdleConns: cfg.Redis.MinIdleConns,
-		MaxRetries:   cfg.Redis.MaxRetries,
+		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Password:     cfg.Password,
+		DB:           cfg.DB,
+		PoolSize:     cfg.PoolSize,
+		MinIdleConns: cfg.MinIdleConns,
+		MaxRetries:   cfg.MaxRetries,
 	}
 
 	client := redis.NewClient(opts)
@@ -37,12 +69,33 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		logger.Error("Failed to connect to Redis", zap.Error(err))
 		return nil, fmt.Errorf("connect to redis failed: %w", err)
 	}
 
-	logger.Info("Successfully connected to Redis")
 	return &Client{client: client}, nil
+}
+
+// GetClient 获取指定名称的Redis客户端
+func (m *RedisManager) GetClient(name string) (*Client, error) {
+	client, exists := m.clients[name]
+	if !exists {
+		return nil, fmt.Errorf("redis client %s not found", name)
+	}
+	return client, nil
+}
+
+// Close 关闭所有Redis连接
+func (m *RedisManager) Close() error {
+	var errs []error
+	for name, client := range m.clients {
+		if err := client.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close redis client %s: %w", name, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing redis clients: %v", errs)
+	}
+	return nil
 }
 
 // Set stores a key-value pair with expiration

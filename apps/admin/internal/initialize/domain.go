@@ -33,7 +33,15 @@ func (d *Domain) Init(ctx context.Context) error {
 	defer d.mu.Unlock()
 
 	// 初始化仓储层
-	d.Repos.User = repository.NewUserRepository(d.infra.DB.DB(), d.infra.Redis)
+	defaultDB, err := d.infra.DB.GetDB("default")
+	if err != nil {
+		return err
+	}
+	defaultRedis, err := d.infra.Redis.GetClient("default")
+	if err != nil {
+		return err
+	}
+	d.Repos.User = repository.NewUserRepository(defaultDB.DB(), defaultRedis)
 	d.infra.Logger.Info("Repositories initialized")
 
 	// 初始化用例层

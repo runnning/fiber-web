@@ -25,24 +25,36 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
+	MultiDB   bool                `mapstructure:"multi_db"`  // 是否启用多库模式
+	Databases map[string]DBConfig `mapstructure:"databases"` // 多库配置
+	Default   DBConfig            `mapstructure:"default"`   // 单库配置
+}
+
+type DBConfig struct {
 	Host            string        `mapstructure:"host"`
 	Port            int           `mapstructure:"port"`
 	User            string        `mapstructure:"user"`
 	Password        string        `mapstructure:"password"`
 	DBName          string        `mapstructure:"dbname"`
-	MaxIdleConns    int           `mapstructure:"max_idle_conns"`    // 最大空闲连接数
-	MaxOpenConns    int           `mapstructure:"max_open_conns"`    // 最大打开连接数
-	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"` // 连接最大生命周期
+	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
+	MaxOpenConns    int           `mapstructure:"max_open_conns"`
+	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
 }
 
 type RedisConfig struct {
-	Host         string
-	Port         int
-	Password     string
-	DB           int
-	PoolSize     int // 连接池大小
-	MinIdleConns int // 最小空闲连接数
-	MaxRetries   int // 最大重试次数
+	MultiInstance bool                           `mapstructure:"multi_instance"` // 是否启用多实例
+	Instances     map[string]RedisInstanceConfig `mapstructure:"instances"`      // 多实例配置
+	Default       RedisInstanceConfig            `mapstructure:"default"`        // 单实例配置
+}
+
+type RedisInstanceConfig struct {
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	Password     string `mapstructure:"password"`
+	DB           int    `mapstructure:"db"`
+	PoolSize     int    `mapstructure:"pool_size"`
+	MinIdleConns int    `mapstructure:"min_idle_conns"`
+	MaxRetries   int    `mapstructure:"max_retries"`
 }
 
 type NSQConfig struct {
@@ -106,9 +118,12 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.port", 3000)
 	viper.SetDefault("app.env", "development")
 	viper.SetDefault("app.name", "fiber-web")
-	viper.SetDefault("redis.host", "localhost")
-	viper.SetDefault("redis.port", 6379)
-	viper.SetDefault("redis.db", 0)
+	viper.SetDefault("redis.instances.default.host", "localhost")
+	viper.SetDefault("redis.instances.default.port", 6379)
+	viper.SetDefault("redis.instances.default.db", 0)
+	viper.SetDefault("redis.instances.default.pool_size", 10)
+	viper.SetDefault("redis.instances.default.min_idle_conns", 5)
+	viper.SetDefault("redis.instances.default.max_retries", 3)
 	viper.SetDefault("nsq.nsqd.host", "localhost")
 	viper.SetDefault("nsq.nsqd.port", 4150)
 	viper.SetDefault("nsq.lookupd.host", "localhost")
