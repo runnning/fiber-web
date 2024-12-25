@@ -5,7 +5,7 @@ import (
 	"fiber_web/apps/admin/internal/bootstrap"
 	"fiber_web/apps/admin/internal/endpoint"
 	"fiber_web/apps/admin/internal/middleware"
-	"fiber_web/apps/admin/internal/router"
+	"fiber_web/apps/admin/internal/transport"
 	"fiber_web/pkg/server"
 	"fiber_web/pkg/validator"
 	"fmt"
@@ -59,7 +59,7 @@ func (a *App) initAPIRoutes(ctx context.Context) error {
 	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
 
 	// 注册各模块路由
-	router.RegisterUserRoutes(v1, userHandler, a.infra.Config)
+	transport.RegisterUserRoutes(v1, userHandler, a.infra.Config)
 	// 后续添加其他模块路由
 	// router.RegisterProductRoutes(v1, productHandler)
 	// router.RegisterOrderRoutes(v1, orderHandler)

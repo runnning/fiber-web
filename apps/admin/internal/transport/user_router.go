@@ -1,4 +1,4 @@
-package router
+package transport
 
 import (
 	"fiber_web/apps/admin/internal/endpoint"
