@@ -5,7 +5,7 @@ import (
 	"fiber_web/apps/admin/internal/bootstrap"
 	"fiber_web/apps/admin/internal/endpoint"
 	"fiber_web/apps/admin/internal/middleware"
-	"fiber_web/pkg/auth"
+	"fiber_web/apps/admin/internal/router"
 	"fiber_web/pkg/server"
 	"fiber_web/pkg/validator"
 	"fmt"
@@ -55,14 +55,14 @@ func (a *App) initRoutes(ctx context.Context) error {
 func (a *App) initAPIRoutes(ctx context.Context) error {
 	validator := validator.New(&validator.Config{Language: a.infra.Config.App.Language})
 	userHandler := endpoint.NewUserHandler(a.domain.Uses.User, validator)
+
 	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
-	{
-		v1.Post("/register", userHandler.Register)
-		v1.Post("/login", userHandler.Login)
-		v1.Get("/users", middleware.Pagination(), userHandler.ListUsers)
-		v1.Get("/test", middleware.Pagination(), userHandler.TestUser)
-		v1.Get("/users/me", middleware.Jwt(auth.NewJWTManager(a.infra.Config)), userHandler.GetProfile)
-	}
+
+	// 注册各模块路由
+	router.RegisterUserRoutes(v1, userHandler, a.infra.Config)
+	// 后续添加其他模块路由
+	// router.RegisterProductRoutes(v1, productHandler)
+	// router.RegisterOrderRoutes(v1, orderHandler)
 
 	return nil
 }
