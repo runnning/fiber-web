@@ -522,7 +522,7 @@ multiply2 := func(x int) int { return x * 2 }
 pipeline := fp.Compose(add1, multiply2)
 result := pipeline(5) // ((5 + 1) * 2) = 12
 
-// Option ��型用于可空值
+// Option 类型型用于可空值
 user := fp.Some("John")
 if user.IsSome() {
     name := user.Unwrap()
