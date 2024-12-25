@@ -1,7 +1,5 @@
 package fp
 
-import "fmt"
-
 // Pipe chains multiple functions together, passing the output of one to the input of the next
 func Pipe[T any](f func(T) T) func(func(T) T) func(T) T {
 	return func(g func(T) T) func(T) T {
@@ -145,11 +143,4 @@ func (o Option[T]) UnwrapOr(default_ T) T {
 		return default_
 	}
 	return *o.value
-}
-
-func test() {
-	add := func(a, b int) int { return a + b }
-	curriedAdd := Curry(add)
-	result := curriedAdd(1)(2) // 结果为3
-	fmt.Println(result)
 }
