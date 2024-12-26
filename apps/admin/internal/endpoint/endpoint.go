@@ -12,7 +12,9 @@ type Handlers struct {
 }
 
 // InitHandlers 初始化所有处理器
-func InitHandlers(User usecase.UserUseCase, validator *validator.Validator) *Handlers {
+func InitHandlers(
+	User usecase.UserUseCase,
+	validator *validator.Validator) *Handlers {
 	return &Handlers{
 		User: user.NewUserHandler(User, validator),
 	}
