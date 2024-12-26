@@ -54,15 +54,10 @@ func (a *App) initRoutes(ctx context.Context) error {
 
 func (a *App) initAPIRoutes(ctx context.Context) error {
 	validator := validator.New(&validator.Config{Language: a.infra.Config.App.Language})
-	userHandler := endpoint.NewUserHandler(a.domain.Uses.User, validator)
-
+	handlers := endpoint.InitHandlers(a.domain.Uses.User, validator)
 	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
-
-	// 注册各模块路由
-	transport.RegisterUserRoutes(v1, userHandler, a.infra.Config)
-	// 后续添加其他模块路由
-	// router.RegisterProductRoutes(v1, productHandler)
-	// router.RegisterOrderRoutes(v1, orderHandler)
+	// 注册路由
+	transport.RegisterUserRoutes(v1, handlers, a.infra.Config)
 
 	return nil
 }
