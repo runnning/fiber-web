@@ -9,7 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func RegisterUserRoutes(app fiber.Router, handlers *endpoint.Handlers, config *config.Config) {
+func RegisterApiRoutes(app fiber.Router, handlers *endpoint.Handlers, config *config.Config) {
 	app.Post("/register", handlers.User.Register)
 	app.Post("/login", handlers.User.Login)
 	app.Get("/users", middleware.Pagination(), handlers.User.ListUsers)

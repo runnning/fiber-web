@@ -1,4 +1,4 @@
-package endpoint
+package user
 
 import (
 	"fiber_web/apps/admin/internal/entity"

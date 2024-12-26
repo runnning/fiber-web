@@ -57,7 +57,7 @@ func (a *App) initAPIRoutes(ctx context.Context) error {
 	handlers := endpoint.InitHandlers(a.domain.Uses.User, validator)
 	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
 	// 注册路由
-	transport.RegisterUserRoutes(v1, handlers, a.infra.Config)
+	transport.RegisterApiRoutes(v1, handlers, a.infra.Config)
 
 	return nil
 }
