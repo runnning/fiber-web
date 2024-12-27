@@ -17,10 +17,10 @@ type RouterInitializer struct {
 }
 
 // NewRouterInitializer 创建路由初始化器
-func NewRouterInitializer(app *fiber.App, domain *usecase.UseCases) *RouterInitializer {
+func NewRouterInitializer(app *fiber.App, uses *usecase.UseCases) *RouterInitializer {
 	return &RouterInitializer{
 		app:  app,
-		uses: domain,
+		uses: uses,
 	}
 }
 
