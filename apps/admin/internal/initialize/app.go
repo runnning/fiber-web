@@ -3,12 +3,8 @@ package initialize
 import (
 	"context"
 	"fiber_web/apps/admin/internal/bootstrap"
-	"fiber_web/apps/admin/internal/endpoint"
-	"fiber_web/apps/admin/internal/middleware"
 	"fiber_web/apps/admin/internal/transport"
-	"fiber_web/pkg/config"
 	"fiber_web/pkg/server"
-	"fiber_web/pkg/validator"
 	"fmt"
 )
 
@@ -45,27 +41,12 @@ func (a *App) Init(ctx context.Context) error {
 func (a *App) initRoutes(ctx context.Context) error {
 	switch a.appType {
 	case AppTypeAPI:
-		return a.initAPIRoutes(ctx)
+		return transport.NewRouterInitializer(a.server.App(), a.domain.Uses).InitAPIRoutes()
 	case AppTypeAdmin:
-		return a.initAdminRoutes(ctx)
+		return transport.NewRouterInitializer(a.server.App(), a.domain.Uses).InitAdminRoutes()
 	default:
 		return fmt.Errorf("unsupported app type: %s", a.appType)
 	}
-}
-
-func (a *App) initAPIRoutes(ctx context.Context) error {
-	validator := validator.New(&validator.Config{Language: config.Data.App.Language})
-	handlers := endpoint.InitHandlers(a.domain.Uses, validator)
-	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(config.Data.App.Env)...)
-	// 注册路由
-	transport.RegisterApiRoutes(v1, handlers)
-
-	return nil
-}
-
-func (a *App) initAdminRoutes(ctx context.Context) error {
-	// TODO: 实现管理后台路由
-	return nil
 }
 
 // Start 实现 Component 接口
