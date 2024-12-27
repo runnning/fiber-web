@@ -5,6 +5,14 @@ import (
 	"sync"
 )
 
+// 生命周期阶段常量
+const (
+	HookBeforeInit = "beforeInit"
+	HookAfterInit  = "afterInit"
+	HookBeforeStop = "beforeStop"
+	HookAfterStop  = "afterStop"
+)
+
 // LifecycleHook 生命周期钩子函数类型
 type LifecycleHook func(ctx context.Context) error
 
@@ -58,13 +66,13 @@ func (b *Bootstrapper) AddHook(phase string, hook LifecycleHook) {
 	defer b.mu.Unlock()
 
 	switch phase {
-	case "beforeInit":
+	case HookBeforeInit:
 		b.hooks.beforeInit = append(b.hooks.beforeInit, hook)
-	case "afterInit":
+	case HookAfterInit:
 		b.hooks.afterInit = append(b.hooks.afterInit, hook)
-	case "beforeStop":
+	case HookBeforeStop:
 		b.hooks.beforeStop = append(b.hooks.beforeStop, hook)
-	case "afterStop":
+	case HookAfterStop:
 		b.hooks.afterStop = append(b.hooks.afterStop, hook)
 	}
 }
@@ -141,11 +149,3 @@ func (b *Bootstrapper) Shutdown() error {
 
 	return nil
 }
-
-// 生命周期阶段常量
-const (
-	HookBeforeInit = "beforeInit"
-	HookAfterInit  = "afterInit"
-	HookBeforeStop = "beforeStop"
-	HookAfterStop  = "afterStop"
-)
