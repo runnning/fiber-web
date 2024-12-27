@@ -10,21 +10,9 @@ import (
 // Domain 业务领域
 type Domain struct {
 	infra *Infra
-	Repos *Repositories
-	Uses  *UseCases
+	Repos *repository.Repositories
+	Uses  *usecase.UseCases
 	mu    sync.RWMutex
-}
-
-// Repositories 仓储层集合
-type Repositories struct {
-	User repository.UserRepository
-	// 添加其他仓储...
-}
-
-// UseCases 用例层集合
-type UseCases struct {
-	User usecase.UserUseCase
-	// 添加其他用例...
 }
 
 // Init 实现 Component 接口
@@ -41,11 +29,11 @@ func (d *Domain) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	d.Repos.User = repository.NewUserRepository(defaultDB.DB(), defaultRedis)
+	d.Repos = repository.InitRepositories(defaultDB.DB(), defaultRedis)
 	d.infra.Logger.Info("Repositories initialized")
 
 	// 初始化用例层
-	d.Uses.User = usecase.NewUserUseCase(d.Repos.User)
+	d.Uses = usecase.InitUseCases(d.Repos)
 	d.infra.Logger.Info("UseCases initialized")
 
 	return nil
@@ -64,7 +52,5 @@ func (d *Domain) Stop(ctx context.Context) error {
 func NewDomain(infra *Infra) *Domain {
 	return &Domain{
 		infra: infra,
-		Repos: &Repositories{},
-		Uses:  &UseCases{},
 	}
 }

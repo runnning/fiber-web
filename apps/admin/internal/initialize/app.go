@@ -54,7 +54,7 @@ func (a *App) initRoutes(ctx context.Context) error {
 
 func (a *App) initAPIRoutes(ctx context.Context) error {
 	validator := validator.New(&validator.Config{Language: a.infra.Config.App.Language})
-	handlers := endpoint.InitHandlers(a.domain.Uses.User, validator)
+	handlers := endpoint.InitHandlers(a.domain.Uses, validator)
 	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
 	// 注册路由
 	transport.RegisterApiRoutes(v1, handlers, a.infra.Config)
