@@ -49,11 +49,11 @@ type JWTManager struct {
 }
 
 // NewJWTManager creates a new JWT manager
-func NewJWTManager(cfg *config.Config) *JWTManager {
+func NewJWTManager(cfg *config.JWTConfig) *JWTManager {
 	return &JWTManager{
-		secretKey:          cfg.JWT.SecretKey,
-		accessTokenExpiry:  cfg.JWT.AccessTokenExpiry,
-		refreshTokenExpiry: cfg.JWT.RefreshTokenExpiry,
+		secretKey:          cfg.SecretKey,
+		accessTokenExpiry:  cfg.AccessTokenExpiry,
+		refreshTokenExpiry: cfg.RefreshTokenExpiry,
 	}
 }
 

@@ -26,14 +26,14 @@ type Client struct {
 }
 
 // NewRedisManager 创建Redis管理器
-func NewRedisManager(cfg *config.Config) (*RedisManager, error) {
+func NewRedisManager(cfg *config.RedisConfig) (*RedisManager, error) {
 	manager := &RedisManager{
 		clients: make(map[string]*Client),
 	}
 
-	if cfg.Redis.MultiInstance {
+	if cfg.MultiInstance {
 		// 多实例模式
-		for name, redisConfig := range cfg.Redis.Instances {
+		for name, redisConfig := range cfg.Instances {
 			client, err := newRedisClient(&redisConfig)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create redis client %s: %w", name, err)
@@ -42,7 +42,7 @@ func NewRedisManager(cfg *config.Config) (*RedisManager, error) {
 		}
 	} else {
 		// 单实例模式
-		client, err := newRedisClient(&cfg.Redis.Default)
+		client, err := newRedisClient(&cfg.Default)
 		if err != nil {
 			return nil, err
 		}

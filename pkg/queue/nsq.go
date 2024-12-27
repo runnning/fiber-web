@@ -21,11 +21,11 @@ type Consumer struct {
 }
 
 // NewProducer creates a new NSQ producer
-func NewProducer(cfg *config.Config) (*Producer, error) {
+func NewProducer(cfg *config.NSQConfig) (*Producer, error) {
 	nsqConfig := nsq.NewConfig()
 	nsqConfig.DefaultRequeueDelay = time.Second * 5
 
-	addr := fmt.Sprintf("%s:%d", cfg.NSQ.NSQD.Host, cfg.NSQ.NSQD.Port)
+	addr := fmt.Sprintf("%s:%d", cfg.NSQD.Host, cfg.NSQD.Port)
 	prod, err := nsq.NewProducer(addr, nsqConfig)
 	if err != nil {
 		logger.Error("Failed to create NSQ producer", zap.Error(err))

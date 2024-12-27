@@ -6,6 +6,7 @@ import (
 	"fiber_web/apps/admin/internal/endpoint"
 	"fiber_web/apps/admin/internal/middleware"
 	"fiber_web/apps/admin/internal/transport"
+	"fiber_web/pkg/config"
 	"fiber_web/pkg/server"
 	"fiber_web/pkg/validator"
 	"fmt"
@@ -53,11 +54,11 @@ func (a *App) initRoutes(ctx context.Context) error {
 }
 
 func (a *App) initAPIRoutes(ctx context.Context) error {
-	validator := validator.New(&validator.Config{Language: a.infra.Config.App.Language})
+	validator := validator.New(&validator.Config{Language: config.Data.App.Language})
 	handlers := endpoint.InitHandlers(a.domain.Uses, validator)
-	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(a.infra.Config.App.Env)...)
+	v1 := a.server.App().Group("/api/v1", middleware.CommMiddleware(config.Data.App.Env)...)
 	// 注册路由
-	transport.RegisterApiRoutes(v1, handlers, a.infra.Config)
+	transport.RegisterApiRoutes(v1, handlers)
 
 	return nil
 }

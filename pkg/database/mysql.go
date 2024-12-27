@@ -20,14 +20,14 @@ type Database struct {
 }
 
 // NewDBManager 创建数据库管理器
-func NewDBManager(cfg *config.Config) (*DBManager, error) {
+func NewDBManager(cfg *config.DatabaseConfig) (*DBManager, error) {
 	manager := &DBManager{
 		dbs: make(map[string]*Database),
 	}
 
-	if cfg.Database.MultiDB {
+	if cfg.MultiDB {
 		// 多库模式
-		for name, dbConfig := range cfg.Database.Databases {
+		for name, dbConfig := range cfg.Databases {
 			db, err := newDatabase(&dbConfig)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create database %s: %w", name, err)
@@ -36,7 +36,7 @@ func NewDBManager(cfg *config.Config) (*DBManager, error) {
 		}
 	} else {
 		// 单库模式
-		db, err := newDatabase(&cfg.Database.Default)
+		db, err := newDatabase(&cfg.Default)
 		if err != nil {
 			return nil, err
 		}

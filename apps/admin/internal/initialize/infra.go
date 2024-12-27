@@ -17,7 +17,7 @@ import (
 
 // Infra 基础设施
 type Infra struct {
-	Config *config.Config
+	//Config *config.Config
 	DB     *database.DBManager
 	Redis  *redis.RedisManager
 	NSQ    *queue.Producer
@@ -26,8 +26,8 @@ type Infra struct {
 	mu     sync.RWMutex
 }
 
-func NewInfra(cfg *config.Config) *Infra {
-	return &Infra{Config: cfg}
+func NewInfra() *Infra {
+	return &Infra{}
 }
 
 // Init 实现 Component 接口
@@ -36,14 +36,14 @@ func (i *Infra) Init(ctx context.Context) error {
 	defer i.mu.Unlock()
 
 	// 初始化日志
-	if err := logger.InitLogger(&i.Config.Log); err != nil {
+	if err := logger.InitLogger(&config.Data.Log); err != nil {
 		return err
 	}
 	i.Logger = logger.GetDefaultLogger()
 	i.Logger.Info("Logger initialized")
 
 	// 初始化数据库
-	dbManager, err := database.NewDBManager(i.Config)
+	dbManager, err := database.NewDBManager(&config.Data.Database)
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("Database initialized")
 
 	// 初始化 Redis
-	redisManager, err := redis.NewRedisManager(i.Config)
+	redisManager, err := redis.NewRedisManager(&config.Data.Redis)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("Redis initialized")
 
 	// 初始化 NSQ
-	producer, err := queue.NewProducer(i.Config)
+	producer, err := queue.NewProducer(&config.Data.NSQ)
 	if err != nil {
 		return err
 	}

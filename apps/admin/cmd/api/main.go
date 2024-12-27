@@ -12,12 +12,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.Load()
+	err := config.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	component := initialize.NewComponent(cfg, initialize.AppTypeAPI)
+	component := initialize.NewComponent(initialize.AppTypeAPI)
 
 	if err := component.Initialize(ctx); err != nil {
 		log.Fatal(err)

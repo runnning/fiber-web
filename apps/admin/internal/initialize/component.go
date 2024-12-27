@@ -23,7 +23,6 @@ const (
 
 // Component 组件管理器
 type Component struct {
-	cfg            *config.Config
 	appType        AppType
 	server         *server.FiberServer
 	boot           *bootstrap.Bootstrapper
@@ -32,9 +31,8 @@ type Component struct {
 	lifecycleHooks LifecycleHooks
 }
 
-func NewComponent(cfg *config.Config, appType AppType) *Component {
+func NewComponent(appType AppType) *Component {
 	return &Component{
-		cfg:            cfg,
 		appType:        appType,
 		lifecycleHooks: NewLifecycleHooks(appType),
 	}
@@ -47,8 +45,8 @@ func (c *Component) Initialize(ctx context.Context) error {
 		server.WithReadTimeout(time.Second*30),
 		server.WithWriteTimeout(time.Second*30),
 		server.WithIdleTimeout(time.Second*30),
-		server.WithEnv(c.cfg.App.Env),
-		server.WithAppName(c.cfg.App.Name),
+		server.WithEnv(config.Data.App.Env),
+		server.WithAppName(config.Data.App.Name),
 		server.WithServerHeader("Fiber"),
 		server.WithBodyLimit(4>>20),
 		server.WithDisableStartupMessage(false),
@@ -60,7 +58,7 @@ func (c *Component) Initialize(ctx context.Context) error {
 	c.lifecycleHooks.RegisterHooks(c.boot, c.appType)
 
 	// 按顺序添加组件
-	c.infra = NewInfra(c.cfg)
+	c.infra = NewInfra()
 	c.boot.AddComponent(c.infra)
 
 	domain := NewDomain(c.infra)
@@ -82,7 +80,7 @@ func (c *Component) Run(ctx context.Context) error {
 	// 启动服务器
 	go func() {
 		// 这里不需要检查错误，因为正常关闭时也会返回错误
-		if err := c.server.Start(c.cfg.Server.Address); err != nil {
+		if err := c.server.Start(config.Data.Server.Address); err != nil {
 			// 只有在非正常关闭时才记录错误
 			if err.Error() != "server closed" {
 				log.Printf("Server error: %v\n", err)

@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+var Data = new(Config)
+
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
@@ -92,7 +94,7 @@ type LogConfig struct {
 	Console    bool   `mapstructure:"console"`     // 是否输出到控制台
 }
 
-func Load() (*Config, error) {
+func Load() error {
 	configName := os.Getenv("CONFIG_NAME")
 	if configName == "" {
 		configName = "config.local" // 默认使用本地配置
@@ -160,17 +162,16 @@ func Load() (*Config, error) {
 		if errors.As(err, &configFileNotFoundError) {
 			log.Printf("警告: 未找到配置文件，使用默认配置: %v", err)
 		} else {
-			return nil, err
+			return err
 		}
 	} else {
 		log.Printf("使用配置文件: %s", viper.ConfigFileUsed())
 	}
 
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, err
+	if err := viper.Unmarshal(Data); err != nil {
+		return err
 	}
-	log.Printf("具体配置信息:%+v", config)
+	log.Printf("具体配置信息:%+v", *Data)
 
-	return &config, nil
+	return nil
 }
