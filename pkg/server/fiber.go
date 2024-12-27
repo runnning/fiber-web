@@ -202,7 +202,8 @@ func (s *FiberServer) printRoute(route *fiber.Route) bool {
 		middlewareStr = color.Colorize(" ("+strings.Join(middlewares, ",")+")", color.Magenta)
 	}
 
-	fmt.Printf("[%s] %s --> %s%s\n",
+	fmt.Printf("[%s] %s %s --> %s%s\n",
+		color.Colorize("Fiber-debug", color.Yellow),
 		color.Colorize(fmt.Sprintf("%-7s", route.Method), color.Method(route.Method)),
 		color.Colorize(fmt.Sprintf("%-50s", route.Path), color.Blue),
 		color.Colorize(handlerName, color.Cyan),
