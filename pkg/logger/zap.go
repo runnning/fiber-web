@@ -1,9 +1,11 @@
 package logger
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -76,9 +78,18 @@ func NewLogger(cfg *config.LogConfig) (*Logger, error) {
 
 	// Console output
 	if cfg.Console {
+		var consoleWriter zapcore.WriteSyncer
+		if runtime.GOOS == "windows" {
+			// Windows 平台使用 bufio.Writer 包装 stdout
+			stdout := bufio.NewWriter(os.Stdout)
+			consoleWriter = zapcore.AddSync(stdoutWriteSyncer{stdout})
+		} else {
+			consoleWriter = zapcore.AddSync(os.Stdout)
+		}
+
 		cores = append(cores, zapcore.NewCore(
 			zapcore.NewConsoleEncoder(encoderConfig),
-			zapcore.AddSync(os.Stdout),
+			consoleWriter,
 			level,
 		))
 	}
@@ -88,6 +99,23 @@ func NewLogger(cfg *config.LogConfig) (*Logger, error) {
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 
 	return &Logger{log: logger}, nil
+}
+
+// stdoutWriteSyncer 包装 bufio.Writer 实现 WriteSyncer 接口
+type stdoutWriteSyncer struct {
+	*bufio.Writer
+}
+
+func (ws stdoutWriteSyncer) Sync() error {
+	return ws.Flush()
+}
+
+// Sync flushes any buffered log entries
+func (l *Logger) Sync() error {
+	if l == nil || l.log == nil {
+		return nil
+	}
+	return l.log.Sync()
 }
 
 // InitLogger initializes the default logger
@@ -128,11 +156,6 @@ func (l *Logger) Fatal(msg string, fields ...zap.Field) {
 // With creates a child logger with additional fields
 func (l *Logger) With(fields ...zap.Field) *Logger {
 	return &Logger{log: l.log.With(fields...)}
-}
-
-// Sync flushes any buffered log entries
-func (l *Logger) Sync() error {
-	return l.log.Sync()
 }
 
 // Debug Default logger methods
