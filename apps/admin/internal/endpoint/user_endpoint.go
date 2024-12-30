@@ -1,12 +1,14 @@
 package endpoint
 
 import (
+	"fiber_web/apps/admin/internal/endpoint/validate"
 	"fiber_web/apps/admin/internal/entity"
 	"fiber_web/apps/admin/internal/usecase"
 	"fiber_web/pkg/ctx"
 	"fiber_web/pkg/query"
 	"fiber_web/pkg/response"
 	"fiber_web/pkg/validator"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -42,17 +44,22 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusBadRequest, "无效的用户ID")
 	}
 
-	user := new(entity.User)
-	if err := c.BodyParser(user); err != nil {
+	var req validate.UpdateUserRequest
+	if err := c.BodyParser(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
 	}
 
-	if err := h.validator.ValidateStruct(user); err != nil {
+	if err := h.validator.ValidateStruct(&req); err != nil {
 		errors := h.validator.TranslateError(err)
 		return response.ValidationError(c, errors)
 	}
 
-	user.ID = uint(id)
+	user := &entity.User{
+		ID:       uint(id),
+		Username: req.Username,
+		Email:    req.Email,
+	}
+
 	if err := h.userUseCase.UpdateUser(c.Context(), user); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "更新用户失败")
 	}
@@ -74,34 +81,35 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) Register(c *fiber.Ctx) error {
-	user := new(entity.User)
-	if err := c.BodyParser(user); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
+	var req validate.RegisterRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
 	}
 
-	if err := h.validator.ValidateStruct(user); err != nil {
+	if err := h.validator.ValidateStruct(&req); err != nil {
 		errors := h.validator.TranslateError(err)
 		return response.ValidationError(c, errors)
 	}
-
+	// todo 用户注册逻辑
+	user := new(entity.User)
+	user.Username = req.Username
+	user.Email = req.Email
+	user.Password = req.Password
+	// 处理注册逻辑
 	if err := h.userUseCase.CreateUser(c.Context(), user); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "注册用户失败")
 	}
 
-	return response.Success(c, user)
+	return c.SendStatus(fiber.StatusCreated)
 }
 
 func (h *UserHandler) Login(c *fiber.Ctx) error {
-	credentials := struct {
-		Email    string `json:"email" validate:"required,email"`
-		Password string `json:"password" validate:"required"`
-	}{}
-
-	if err := c.BodyParser(&credentials); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
+	var req validate.LoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
 	}
 
-	if err := h.validator.ValidateStruct(credentials); err != nil {
+	if err := h.validator.ValidateStruct(&req); err != nil {
 		errors := h.validator.TranslateError(err)
 		return response.ValidationError(c, errors)
 	}
