@@ -83,7 +83,7 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 func (h *UserHandler) Register(c *fiber.Ctx) error {
 	var req validate.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
-		return err
+		return response.ServerError(c, err)
 	}
 
 	if err := h.validator.ValidateStruct(&req); err != nil {
@@ -106,7 +106,7 @@ func (h *UserHandler) Register(c *fiber.Ctx) error {
 func (h *UserHandler) Login(c *fiber.Ctx) error {
 	var req validate.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return err
+		return response.ServerError(c, err)
 	}
 
 	if err := h.validator.ValidateStruct(&req); err != nil {
