@@ -24,7 +24,7 @@ func TestWrap(t *testing.T) {
 	if wrapped.Message != "wrapped message" {
 		t.Errorf("Expected message 'wrapped message', got %v", wrapped.Message)
 	}
-	if wrapped.Err != original {
+	if !errors.Is(original, wrapped.Err) {
 		t.Error("Expected wrapped error to contain original error")
 	}
 }
