@@ -346,7 +346,7 @@ func (l *Logger) With(fields ...zap.Field) *Logger {
 	childLogger := &Logger{
 		log:   l.log.With(fields...),
 		async: l.async,
-		wg:    l.wg, // 共享父logger的WaitGroup
+		//wg:    l.wg,
 	}
 
 	if l.async {
