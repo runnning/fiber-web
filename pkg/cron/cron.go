@@ -2,6 +2,7 @@ package cron
 
 import (
 	"errors"
+	"fiber_web/pkg/logger"
 	"sync"
 	"time"
 
@@ -38,12 +39,12 @@ type Task struct {
 type Scheduler struct {
 	cron  *cron.Cron
 	tasks map[string]*Task
-	log   *zap.Logger
+	log   *logger.Logger
 	mu    sync.RWMutex
 }
 
 // NewScheduler 创建一个新的调度器
-func NewScheduler(logger *zap.Logger) *Scheduler {
+func NewScheduler(logger *logger.Logger) *Scheduler {
 	return &Scheduler{
 		cron:  cron.New(cron.WithSeconds()),
 		tasks: make(map[string]*Task),

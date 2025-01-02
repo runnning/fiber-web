@@ -36,10 +36,10 @@ func (i *Infra) Init(ctx context.Context) error {
 	defer i.mu.Unlock()
 
 	// 初始化日志
-	if err := logger.InitLogger(&config.Data.Log); err != nil {
+	if err := logger.InitLogger(&config.Data.Log, logger.WithAsync(3, 1024)); err != nil {
 		return err
 	}
-	i.Logger = logger.GetDefaultLogger()
+	i.Logger = logger.GetLogger()
 	i.Logger.Info("Logger initialized")
 
 	// 初始化数据库

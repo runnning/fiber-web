@@ -5,6 +5,7 @@ import (
 	"fiber_web/apps/admin/internal/entity"
 	"fiber_web/apps/admin/internal/usecase"
 	"fiber_web/pkg/ctx"
+	"fiber_web/pkg/logger"
 	"fiber_web/pkg/query"
 	"fiber_web/pkg/response"
 	"fiber_web/pkg/validator"
@@ -130,6 +131,7 @@ func (h *UserHandler) GetProfile(c *fiber.Ctx) error {
 
 func (h *UserHandler) TestUser(c *fiber.Ctx) error {
 	// TODO: 实现获取用户资料的逻辑
+	logger.GetLogger().Info("测试")
 	return response.Success(c, fiber.Map{
 		"user": map[string]interface{}{"id": 1, "name": "用户"},
 	})
