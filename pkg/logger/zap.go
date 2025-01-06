@@ -20,10 +20,9 @@ import (
 )
 
 const (
-	defaultMaxSize    = 100    // 默认最大文件大小（MB）
-	defaultMaxBackups = 3      // 默认最大备份数
-	defaultMaxAge     = 28     // 默认最大保存天数
-	defaultLevel      = "info" // 默认日志级别
+	defaultMaxSize    = 100 // 默认最大文件大小（MB）
+	defaultMaxBackups = 3   // 默认最大备份数
+	defaultMaxAge     = 28  // 默认最大保存天数
 )
 
 // Logger wraps zap logger
