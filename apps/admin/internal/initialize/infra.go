@@ -76,6 +76,10 @@ func (i *Infra) Init(ctx context.Context) error {
 	}
 	i.Logger.Info("RBAC initialized")
 
+	// 初始化jwt
+	auth.InitJWTManager(&config.Data.JWT)
+	i.Logger.Info("jwt initialized")
+
 	// 启动 Cron
 	i.Cron = cron.NewScheduler(logger.GetLogger())
 	i.Logger.Info("Cron initialized")
@@ -106,6 +110,8 @@ func (i *Infra) Shutdown() error {
 		i.Cron.Stop()
 		i.Logger.Info("Cron scheduler stopped")
 	}
+
+	i.Logger.Info("jwt stopped")
 
 	// 关闭 NSQ
 	if i.NSQ != nil {

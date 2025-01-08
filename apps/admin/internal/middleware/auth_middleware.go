@@ -10,7 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func Jwt(jwtManager *auth.JWTManager) fiber.Handler {
+func Jwt() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Get token from Authorization header
 		authHeader := c.Get("Authorization")
@@ -27,8 +27,7 @@ func Jwt(jwtManager *auth.JWTManager) fiber.Handler {
 				"error": "invalid authorization header format",
 			})
 		}
-
-		claims, err := jwtManager.ValidateToken(parts[1])
+		claims, err := auth.GetJWTManager().ValidateToken(parts[1])
 		if err != nil {
 			status := fiber.StatusUnauthorized
 			message := "invalid token"

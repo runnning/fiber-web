@@ -77,7 +77,7 @@ app:
 jwt:
   secret_key: "your-secret-key-here"
   access_token_expiry: "15m"
-  refresh_token_expiry: "168h" 
+  refresh_token_expiry: "3m"
 
 log:
   level: "info"

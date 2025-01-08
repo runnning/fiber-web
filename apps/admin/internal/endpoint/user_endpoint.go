@@ -4,6 +4,8 @@ import (
 	"fiber_web/apps/admin/internal/endpoint/validate"
 	"fiber_web/apps/admin/internal/entity"
 	"fiber_web/apps/admin/internal/usecase"
+	"fiber_web/pkg/auth"
+	"fiber_web/pkg/config"
 	"fiber_web/pkg/ctx"
 	"fiber_web/pkg/logger"
 	"fiber_web/pkg/query"
@@ -116,10 +118,30 @@ func (h *UserHandler) Login(c *fiber.Ctx) error {
 	}
 
 	// TODO: 实现实际的登录逻辑
-	return response.Success(c, fiber.Map{
-		"message": "登录成功",
-		"token":   "your-jwt-token-here",
-	})
+	jwtMessage, err := auth.GetJWTManager().GenerateTokenPair(1, req.Username, "test")
+	if err != nil {
+		return response.ServerError(c, err)
+	}
+	return response.Success(c, jwtMessage)
+}
+
+func (h *UserHandler) RefreshToken(c *fiber.Ctx) error {
+	var req validate.RefreshTokenRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.ServerError(c, err)
+	}
+
+	if err := h.validator.ValidateStruct(&req); err != nil {
+		errors := h.validator.TranslateError(err)
+		return response.ValidationError(c, errors)
+	}
+
+	// TODO: token相关逻辑
+	jwtMessage, err := auth.NewJWTManager(&config.Data.JWT).RefreshToken(req.Token)
+	if err != nil {
+		return response.ServerError(c, err)
+	}
+	return response.Success(c, jwtMessage)
 }
 
 func (h *UserHandler) GetProfile(c *fiber.Ctx) error {
