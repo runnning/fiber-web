@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fiber_web/pkg/auth"
 	"fiber_web/pkg/logger"
+	"fiber_web/pkg/response"
 	"go.uber.org/zap"
 	"strings"
 
@@ -15,30 +16,24 @@ func Jwt() fiber.Handler {
 		// Get token from Authorization header
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "missing authorization header",
-			})
+			return response.Unauthorized(c, "missing authorization header")
 		}
 
 		// Check if the header has the Bearer prefix
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid authorization header format",
-			})
+			return response.Unauthorized(c, "invalid authorization header format")
 		}
+
 		claims, err := auth.GetJWTManager().ValidateToken(parts[1])
 		if err != nil {
-			status := fiber.StatusUnauthorized
 			message := "invalid token"
 
 			if errors.Is(err, auth.ErrExpiredToken) {
 				message = "token has expired"
 			}
 
-			return c.Status(status).JSON(fiber.Map{
-				"error": message,
-			})
+			return response.Unauthorized(c, message)
 		}
 
 		// Store claims in context for later use
