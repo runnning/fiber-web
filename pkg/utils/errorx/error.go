@@ -100,14 +100,14 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
-// Is 实现 errors.Is 接口
-func (e *Error) Is(target error) bool {
+// IsBusinessError 业务逻辑错误(更多错误分类按此代码示例)
+func (e *Error) IsBusinessError(target error) bool {
 	var t *Error
 	ok := errors.As(target, &t)
 	if !ok {
 		return false
 	}
-	return e.Code == t.Code && e.Message == t.Message
+	return e.Code == CodeBusinessError
 }
 
 // StackTrace 返回堆栈跟踪信息字符串
