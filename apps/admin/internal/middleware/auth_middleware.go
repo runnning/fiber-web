@@ -5,6 +5,7 @@ import (
 	"fiber_web/pkg/auth"
 	"fiber_web/pkg/logger"
 	"fiber_web/pkg/response"
+	"fiber_web/pkg/utils/errorx"
 	"go.uber.org/zap"
 	"strings"
 
@@ -46,9 +47,7 @@ func Rbac() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		claims, ok := c.Locals("claims").(*auth.Claims)
 		if !ok {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "unauthorized",
-			})
+			return response.Unauthorized(c, "unauthorized")
 		}
 
 		allowed, err := auth.GetEnforcer().HasPermission(claims.Role, c.Path(), c.Method())
@@ -58,9 +57,7 @@ func Rbac() fiber.Handler {
 				zap.String("path", c.Path()),
 				zap.String("method", c.Method()),
 				zap.Error(err))
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "failed to check permission",
-			})
+			return response.ServerError(c, errorx.NewSystemError("failed to check permission"))
 		}
 
 		if !allowed {
@@ -68,9 +65,7 @@ func Rbac() fiber.Handler {
 				zap.String("role", claims.Role),
 				zap.String("path", c.Path()),
 				zap.String("method", c.Method()))
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "permission denied",
-			})
+			return response.Forbidden(c, "permission denied")
 		}
 		return c.Next()
 	}

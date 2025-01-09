@@ -5,7 +5,6 @@ import (
 	"fiber_web/apps/admin/internal/entity"
 	"fiber_web/apps/admin/internal/usecase"
 	"fiber_web/pkg/auth"
-	"fiber_web/pkg/config"
 	"fiber_web/pkg/ctx"
 	"fiber_web/pkg/logger"
 	"fiber_web/pkg/query"
@@ -86,7 +85,7 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 func (h *UserHandler) Register(c *fiber.Ctx) error {
 	var req validate.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
-		return response.ServerError(c, err)
+		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
 	}
 
 	if err := h.validator.ValidateStruct(&req); err != nil {
@@ -109,7 +108,7 @@ func (h *UserHandler) Register(c *fiber.Ctx) error {
 func (h *UserHandler) Login(c *fiber.Ctx) error {
 	var req validate.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return response.ServerError(c, err)
+		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
 	}
 
 	if err := h.validator.ValidateStruct(&req); err != nil {
@@ -128,7 +127,7 @@ func (h *UserHandler) Login(c *fiber.Ctx) error {
 func (h *UserHandler) RefreshToken(c *fiber.Ctx) error {
 	var req validate.RefreshTokenRequest
 	if err := c.BodyParser(&req); err != nil {
-		return response.ServerError(c, err)
+		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
 	}
 
 	if err := h.validator.ValidateStruct(&req); err != nil {
@@ -137,7 +136,7 @@ func (h *UserHandler) RefreshToken(c *fiber.Ctx) error {
 	}
 
 	// TODO: token相关逻辑
-	jwtMessage, err := auth.NewJWTManager(&config.Data.JWT).RefreshToken(req.Token)
+	jwtMessage, err := auth.GetJWTManager().RefreshToken(req.Token)
 	if err != nil {
 		return response.ServerError(c, err)
 	}
