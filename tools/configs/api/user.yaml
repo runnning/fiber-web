@@ -22,16 +22,18 @@ entities:
         nullable: false
       - name: Username
         type: string
-        tag: 'json:"username" gorm:"size:50;not null;unique"'
+        tag: 'json:"username" gorm:"size:50;not null"'
         comment: 用户名
         sql_type: VARCHAR(50)
         nullable: false
+        unique: ["username_email"] # 与 email 组成复合唯一索引
       - name: Email
         type: string
-        tag: 'json:"email" gorm:"size:100;not null;unique"'
+        tag: 'json:"email" gorm:"size:100;not null"'
         comment: 邮箱
         sql_type: VARCHAR(100)
         nullable: false
+        unique: ["username_email"] # 与 username 组成复合唯一索引
       - name: Password
         type: string
         tag: 'json:"password" gorm:"size:100;not null"'
@@ -44,11 +46,13 @@ entities:
         tag: 'json:"status" gorm:"size:1;default:1"'
         comment: 状态
         nullable: false
+        index: ["status_created"] # 与 created_at 组成复合索引
       - name: CreatedAt
         type: time.Time
         tag: 'json:"created_at" gorm:"not null"'
         comment: 创建时间
         nullable: false
+        index: ["status_created"] # 与 status 组成复合索引
       - name: UpdatedAt
         type: time.Time
         tag: 'json:"updated_at" gorm:"not null"'

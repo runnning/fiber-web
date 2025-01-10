@@ -230,36 +230,50 @@ func (g *Generator) generateCreateTableSQL(entity Entity) string {
 	b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", entity.TableName))
 
 	var columns []string
-	var primaryKeys, uniqueKeys, indexes []string
+	var primaryKeys []string
+
+	// 用于收集索引信息
+	indexMap := make(map[string][]string)       // 普通索引
+	uniqueIndexMap := make(map[string][]string) // 唯一索引
 
 	for _, field := range entity.Fields {
 		columns = append(columns, g.generateColumnDef(field))
 
+		// 处理 gorm 标签
 		if tags := parseGormTag(field.Tag); len(tags) > 0 {
 			if _, ok := tags["primarykey"]; ok {
 				primaryKeys = append(primaryKeys, field.Name)
 			}
-			if _, ok := tags["unique"]; ok {
-				uniqueKeys = append(uniqueKeys, field.Name)
-			}
-			if _, ok := tags["index"]; ok {
-				indexes = append(indexes, field.Name)
-			}
+		}
+
+		// 处理普通索引
+		for _, idxName := range field.Index {
+			indexMap[idxName] = append(indexMap[idxName], field.Name)
+		}
+
+		// 处理唯一索引
+		for _, idxName := range field.Unique {
+			uniqueIndexMap[idxName] = append(uniqueIndexMap[idxName], field.Name)
 		}
 	}
 
 	b.WriteString(strings.Join(columns, ",\n"))
 
+	// 添加主键
 	if len(primaryKeys) > 0 {
 		b.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
 	}
 
-	for _, key := range uniqueKeys {
-		b.WriteString(fmt.Sprintf(",\n  UNIQUE KEY %s_%s_unique (%s)", entity.TableName, strings.ToLower(key), key))
+	// 添加唯一索引
+	for idxName, fields := range uniqueIndexMap {
+		indexName := fmt.Sprintf("%s_%s_unique", entity.TableName, idxName)
+		b.WriteString(fmt.Sprintf(",\n  UNIQUE KEY `%s` (%s)", indexName, strings.Join(fields, ",")))
 	}
 
-	for _, key := range indexes {
-		b.WriteString(fmt.Sprintf(",\n  KEY %s_%s_index (%s)", entity.TableName, strings.ToLower(key), key))
+	// 添加普通索引
+	for idxName, fields := range indexMap {
+		indexName := fmt.Sprintf("%s_%s_idx", entity.TableName, idxName)
+		b.WriteString(fmt.Sprintf(",\n  KEY `%s` (%s)", indexName, strings.Join(fields, ",")))
 	}
 
 	b.WriteString(fmt.Sprintf("\n) ENGINE=%s DEFAULT CHARSET=%s", engine, charset))
