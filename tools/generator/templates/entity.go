@@ -8,10 +8,15 @@ import (
 	"gorm.io/gorm"
 )
 
+// {{.Name}} 实体模型
 type {{.Name}} struct {
-	ID        uint           ` + "`json:\"id\" gorm:\"primarykey\"`" + `
-	CreatedAt time.Time      ` + "`json:\"created_at\"`" + `
-	UpdatedAt time.Time      ` + "`json:\"updated_at\"`" + `
-	DeletedAt gorm.DeletedAt ` + "`json:\"deleted_at,omitempty\" gorm:\"index\"`" + `
+	{{- range .Fields}}
+	{{.Name}} {{.Type}} {{.Tag}} // {{.Comment}}
+	{{- end}}
+}
+
+// TableName 指定表名
+func ({{.VarName}} *{{.Name}}) TableName() string {
+	return "{{.VarName}}s"
 }
 `
