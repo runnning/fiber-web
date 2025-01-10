@@ -2,11 +2,14 @@
 module: user
 db_engine: InnoDB
 db_charset: utf8mb4
-sql_config:
-  filename: "create_user_tables"  # SQL文件名（不含扩展名和时间戳）
-  include_timestamp: true        # 是否包含时间戳
-  version: "v1"                 # 版本号
 
+# SQL生成配置
+sql_config:
+  filename: create_user_tables  # SQL文件名（不含扩展名和时间戳）
+  include_timestamp: true      # 是否包含时间戳
+  version: v1                  # 版本号
+
+# 实体定义
 entities:
   - name: User
     table_name: users

@@ -1,20 +1,32 @@
 package generator
 
 import (
-	"os"
+	"fmt"
 
-	"gopkg.in/yaml.v3"
+	"github.com/spf13/viper"
 )
 
-// LoadConfig 从YAML文件加载配置
-func LoadConfig(filename string) (*ModuleConfig, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
+// LoadConfig 从配置文件加载配置
+func LoadConfig(configFile string) (*ModuleConfig, error) {
+	v := viper.New()
+	v.SetConfigFile(configFile)
+
+	// 设置默认值
+	v.SetDefault("db_engine", "InnoDB")
+	v.SetDefault("db_charset", "utf8mb4")
+	v.SetDefault("sql_config.include_timestamp", true)
+
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("读取配置文件失败: %v", err)
 	}
 
 	var config ModuleConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := v.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("解析配置失败: %v", err)
+	}
+
+	// 验证配置
+	if err := ValidateConfig(&config); err != nil {
 		return nil, err
 	}
 
@@ -24,19 +36,35 @@ func LoadConfig(filename string) (*ModuleConfig, error) {
 // ValidateConfig 验证配置
 func ValidateConfig(config *ModuleConfig) error {
 	if config.Module == "" {
-		return ErrInvalidConfig{Message: "module name is required"}
+		return fmt.Errorf("module 不能为空")
 	}
 	if len(config.Entities) == 0 {
-		return ErrInvalidConfig{Message: "at least one entity is required"}
+		return fmt.Errorf("至少需要一个实体定义")
 	}
+
+	// 验证每个实体
 	for _, entity := range config.Entities {
 		if entity.Name == "" {
-			return ErrInvalidConfig{Message: "entity name is required"}
+			return fmt.Errorf("实体名称不能为空")
+		}
+		if entity.TableName == "" {
+			return fmt.Errorf("实体 %s 的表名不能为空", entity.Name)
 		}
 		if len(entity.Fields) == 0 {
-			return ErrInvalidConfig{Message: "at least one field is required for entity " + entity.Name}
+			return fmt.Errorf("实体 %s 至少需要一个字段", entity.Name)
+		}
+
+		// 验证字段
+		for _, field := range entity.Fields {
+			if field.Name == "" {
+				return fmt.Errorf("实体 %s 的字段名不能为空", entity.Name)
+			}
+			if field.Type == "" {
+				return fmt.Errorf("实体 %s 的字段 %s 类型不能为空", entity.Name, field.Name)
+			}
 		}
 	}
+
 	return nil
 }
 
