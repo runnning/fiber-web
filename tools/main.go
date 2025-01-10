@@ -12,7 +12,7 @@ func main() {
 	flag.Parse()
 
 	if *configFile == "" {
-		fmt.Println("请提供配置文件路径，例如: -config configs/user.yaml")
+		fmt.Println("请提供配置文件路径，例如: -config configs/api/user.yaml")
 		os.Exit(1)
 	}
 
