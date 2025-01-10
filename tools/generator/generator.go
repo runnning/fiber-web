@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 )
@@ -45,7 +44,7 @@ type TemplateData struct {
 type Generator struct {
 	config    *ModuleConfig
 	templates map[string]*template.Template
-	once      sync.Once
+	//once      sync.Once
 }
 
 // NewGenerator 创建生成器
@@ -59,12 +58,12 @@ func NewGenerator(config *ModuleConfig) *Generator {
 // Generate 生成所有文件
 func (g *Generator) Generate() error {
 	// 初始化模板（只执行一次）
-	g.once.Do(func() {
-		if err := g.initTemplates(); err != nil {
-			fmt.Printf("初始化模板失败: %v\n", err)
-			os.Exit(1)
-		}
-	})
+	//g.once.Do(func() {
+	if err := g.initTemplates(); err != nil {
+		fmt.Printf("初始化模板失败: %v\n", err)
+		os.Exit(1)
+	}
+	//})
 
 	// 获取基础目录并创建目录结构
 	baseDir := filepath.Join("./", strings.ToLower(g.config.Module))
