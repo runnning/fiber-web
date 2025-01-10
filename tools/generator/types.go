@@ -1,15 +1,21 @@
 package generator
 
+// Index 表示索引定义
+type Index struct {
+	Name    string   `mapstructure:"name"`    // 索引名称
+	Fields  []string `mapstructure:"fields"`  // 索引字段
+	Unique  bool     `mapstructure:"unique"`  // 是否是唯一索引
+	Comment string   `mapstructure:"comment"` // 索引注释
+}
+
 // Field 表示模型字段
 type Field struct {
-	Name     string   `mapstructure:"name"`     // 字段名
-	Type     string   `mapstructure:"type"`     // 字段类型
-	Tag      string   `mapstructure:"tag"`      // 字段标签
-	Comment  string   `mapstructure:"comment"`  // 字段注释
-	SqlType  string   `mapstructure:"sql_type"` // SQL类型（可选，默认根据Go类型推导）
-	Nullable bool     `mapstructure:"nullable"` // 是否可为空
-	Index    []string `mapstructure:"index"`    // 索引配置，可以包含多个索引名称
-	Unique   []string `mapstructure:"unique"`   // 唯一索引配置，可以包含多个索引名称
+	Name     string `mapstructure:"name"`     // 字段名
+	Type     string `mapstructure:"type"`     // 字段类型
+	Tag      string `mapstructure:"tag"`      // 字段标签
+	Comment  string `mapstructure:"comment"`  // 字段注释
+	SqlType  string `mapstructure:"sql_type"` // SQL类型（可选，默认根据Go类型推导）
+	Nullable bool   `mapstructure:"nullable"` // 是否可为空
 }
 
 // Entity 表示实体定义
@@ -17,6 +23,7 @@ type Entity struct {
 	Name      string  `mapstructure:"name"`       // 实体名称
 	TableName string  `mapstructure:"table_name"` // 表名
 	Fields    []Field `mapstructure:"fields"`     // 字段列表
+	Indexes   []Index `mapstructure:"indexes"`    // 索引列表
 	Comment   string  `mapstructure:"comment"`    // 表注释
 }
 

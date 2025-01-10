@@ -5,15 +5,32 @@ db_charset: utf8mb4
 
 # SQL生成配置
 sql_config:
-  filename: create_user_tables  # SQL文件名（不含扩展名和时间戳）
-  include_timestamp: true      # 是否包含时间戳
-  version: v1                  # 版本号
+  filename: create_user_tables
+  include_timestamp: true
+  version: v1
 
 # 实体定义
 entities:
   - name: User
     table_name: users
     comment: 用户表
+    # 索引定义
+    indexes:
+      - name: username_email
+        fields: [ "Username", "Email" ]
+        unique: true
+        comment: "用户名和邮箱组合唯一索引"
+      - name: email
+        fields: [ "Email" ]
+        unique: true
+        comment: "邮箱唯一索引"
+      - name: status
+        fields: [ "Status" ]
+        comment: "状态索引"
+      - name: status_created
+        fields: [ "Status", "CreatedAt" ]
+        comment: "状态和创建时间复合索引"
+    # 字段定义
     fields:
       - name: ID
         type: uint
@@ -26,14 +43,12 @@ entities:
         comment: 用户名
         sql_type: VARCHAR(50)
         nullable: false
-        unique: [ "username_email" ] # 与 email 组成复合唯一索引
       - name: Email
         type: string
         tag: 'json:"email" gorm:"size:100;not null"'
         comment: 邮箱
         sql_type: VARCHAR(100)
         nullable: false
-        unique: [ "username_email" ] # 与 username 组成复合唯一索引
       - name: Password
         type: string
         tag: 'json:"password" gorm:"size:100;not null"'
@@ -46,13 +61,11 @@ entities:
         tag: 'json:"status" gorm:"size:1;default:1"'
         comment: 状态
         nullable: false
-        index: [ "status_created" ] # 与 created_at 组成复合索引
       - name: CreatedAt
         type: time.Time
         tag: 'json:"created_at" gorm:"not null"'
         comment: 创建时间
         nullable: false
-        index: [ "status_created" ] # 与 status 组成复合索引
       - name: UpdatedAt
         type: time.Time
         tag: 'json:"updated_at" gorm:"not null"'

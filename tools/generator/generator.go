@@ -60,7 +60,6 @@ type TemplateData struct {
 type Generator struct {
 	config    *ModuleConfig
 	templates map[string]*template.Template
-	//once      sync.Once
 }
 
 // NewGenerator 创建生成器
@@ -73,15 +72,11 @@ func NewGenerator(config *ModuleConfig) *Generator {
 
 // Generate 生成所有文件
 func (g *Generator) Generate() error {
-	// 初始化模板（只执行一次）
-	//g.once.Do(func() {
 	if err := g.initTemplates(); err != nil {
 		fmt.Printf("初始化模板失败: %v\n", err)
 		os.Exit(1)
 	}
-	//})
 
-	// 获取基础目录并创建目录结构
 	baseDir := filepath.Join("./", strings.ToLower(g.config.Module))
 	if err := g.createDirs(baseDir); err != nil {
 		return err
@@ -178,32 +173,13 @@ func (g *Generator) generateFile(tmplName, outputPath string, data interface{}) 
 }
 
 // SQL 生成相关方法
-
-func (g *Generator) generateSQLFileName() string {
-	var parts []string
-
-	if g.config.SQLConfig.Filename != "" {
-		parts = append(parts, g.config.SQLConfig.Filename)
-	} else {
-		parts = append(parts, fmt.Sprintf("create_%s_tables", strings.ToLower(g.config.Module)))
-	}
-
-	if g.config.SQLConfig.Version != "" {
-		parts = append(parts, g.config.SQLConfig.Version)
-	}
-
-	if g.config.SQLConfig.IncludeTimestamp {
-		parts = append(parts, time.Now().Format("20060102_150405"))
-	}
-
-	return strings.Join(parts, "_") + ".sql"
-}
-
 func (g *Generator) generateSQL() string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("-- 生成时间: %s\n", time.Now().Format("2006-01-02 15:04:05")))
-	b.WriteString(fmt.Sprintf("-- 模块: %s\n\n", g.config.Module))
 
+	// 添加头部注释
+	g.writeHeaderComment(&b)
+
+	// 生成每个实体的建表语句
 	for _, entity := range g.config.Entities {
 		if entity.Comment != "" {
 			b.WriteString(fmt.Sprintf("-- %s\n", entity.Comment))
@@ -215,9 +191,75 @@ func (g *Generator) generateSQL() string {
 	return b.String()
 }
 
+func (g *Generator) writeHeaderComment(b *strings.Builder) {
+	b.WriteString(fmt.Sprintf("-- 生成时间: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	b.WriteString(fmt.Sprintf("-- 模块: %s\n\n", g.config.Module))
+}
+
 func (g *Generator) generateCreateTableSQL(entity Entity) string {
 	var b strings.Builder
 
+	// 写入建表头部
+	g.writeTableHeader(&b, entity)
+
+	// 写入列定义
+	columns, primaryKeys := g.generateColumns(entity.Fields)
+	b.WriteString(strings.Join(columns, ",\n"))
+
+	// 写入主键
+	g.writePrimaryKey(&b, primaryKeys)
+
+	// 写入索引
+	g.writeIndexes(&b, entity)
+
+	// 写入表选项
+	g.writeTableOptions(&b, entity)
+
+	return b.String()
+}
+
+func (g *Generator) writeTableHeader(b *strings.Builder, entity Entity) {
+	b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", entity.TableName))
+}
+
+func (g *Generator) generateColumns(fields []Field) ([]string, []string) {
+	columns := make([]string, 0, len(fields))
+	var primaryKeys []string
+
+	for _, field := range fields {
+		columns = append(columns, g.generateColumnDef(field))
+		if tags := parseGormTag(field.Tag); tags["primarykey"] == "true" {
+			primaryKeys = append(primaryKeys, field.Name)
+		}
+	}
+	return columns, primaryKeys
+}
+
+func (g *Generator) writePrimaryKey(b *strings.Builder, primaryKeys []string) {
+	if len(primaryKeys) > 0 {
+		b.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
+	}
+}
+
+func (g *Generator) writeIndexes(b *strings.Builder, entity Entity) {
+	for _, idx := range entity.Indexes {
+		indexSuffix := map[bool]string{true: "unique", false: "idx"}[idx.Unique]
+		indexName := fmt.Sprintf("%s_%s_%s", entity.TableName, idx.Name, indexSuffix)
+		indexType := map[bool]string{true: "UNIQUE KEY", false: "KEY"}[idx.Unique]
+
+		b.WriteString(fmt.Sprintf(",\n  %s `%s` (%s)",
+			indexType,
+			indexName,
+			strings.Join(idx.Fields, ","),
+		))
+
+		if idx.Comment != "" {
+			b.WriteString(fmt.Sprintf(" COMMENT '%s'", idx.Comment))
+		}
+	}
+}
+
+func (g *Generator) writeTableOptions(b *strings.Builder, entity Entity) {
 	engine := g.config.DbEngine
 	if engine == "" {
 		engine = "InnoDB"
@@ -227,55 +269,6 @@ func (g *Generator) generateCreateTableSQL(entity Entity) string {
 		charset = "utf8mb4"
 	}
 
-	b.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n", entity.TableName))
-
-	var columns []string
-	var primaryKeys []string
-
-	// 用于收集索引信息
-	indexMap := make(map[string][]string)       // 普通索引
-	uniqueIndexMap := make(map[string][]string) // 唯一索引
-
-	for _, field := range entity.Fields {
-		columns = append(columns, g.generateColumnDef(field))
-
-		// 处理 gorm 标签
-		if tags := parseGormTag(field.Tag); len(tags) > 0 {
-			if _, ok := tags["primarykey"]; ok {
-				primaryKeys = append(primaryKeys, field.Name)
-			}
-		}
-
-		// 处理普通索引
-		for _, idxName := range field.Index {
-			indexMap[idxName] = append(indexMap[idxName], field.Name)
-		}
-
-		// 处理唯一索引
-		for _, idxName := range field.Unique {
-			uniqueIndexMap[idxName] = append(uniqueIndexMap[idxName], field.Name)
-		}
-	}
-
-	b.WriteString(strings.Join(columns, ",\n"))
-
-	// 添加主键
-	if len(primaryKeys) > 0 {
-		b.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(primaryKeys, ",")))
-	}
-
-	// 添加唯一索引
-	for idxName, fields := range uniqueIndexMap {
-		indexName := fmt.Sprintf("%s_%s_unique", entity.TableName, idxName)
-		b.WriteString(fmt.Sprintf(",\n  UNIQUE KEY `%s` (%s)", indexName, strings.Join(fields, ",")))
-	}
-
-	// 添加普通索引
-	for idxName, fields := range indexMap {
-		indexName := fmt.Sprintf("%s_%s_idx", entity.TableName, idxName)
-		b.WriteString(fmt.Sprintf(",\n  KEY `%s` (%s)", indexName, strings.Join(fields, ",")))
-	}
-
 	b.WriteString(fmt.Sprintf("\n) ENGINE=%s DEFAULT CHARSET=%s", engine, charset))
 
 	if entity.Comment != "" {
@@ -283,33 +276,14 @@ func (g *Generator) generateCreateTableSQL(entity Entity) string {
 	}
 
 	b.WriteString(";\n")
-	return b.String()
 }
 
 func (g *Generator) generateColumnDef(field Field) string {
-	var parts []string
-
-	sqlType := field.SqlType
-	if sqlType == "" {
-		sqlType = typeMap[field.Type]
-		if sqlType == "" {
-			sqlType = "VARCHAR(255)"
-		}
-	}
-	parts = append(parts, fmt.Sprintf("  %s %s", field.Name, sqlType))
-
-	if !field.Nullable && !strings.Contains(strings.ToUpper(sqlType), "DATETIME") {
-		parts = append(parts, "NOT NULL")
+	parts := []string{
+		fmt.Sprintf("  %s %s", field.Name, g.getColumnType(field)),
 	}
 
-	if tags := parseGormTag(field.Tag); len(tags) > 0 {
-		if val, ok := tags["default"]; ok {
-			parts = append(parts, fmt.Sprintf("DEFAULT %s", val))
-		}
-		if _, ok := tags["primarykey"]; ok {
-			parts = append(parts, "AUTO_INCREMENT")
-		}
-	}
+	parts = append(parts, g.getColumnConstraints(field)...)
 
 	if field.Comment != "" {
 		parts = append(parts, fmt.Sprintf("COMMENT '%s'", field.Comment))
@@ -318,9 +292,39 @@ func (g *Generator) generateColumnDef(field Field) string {
 	return strings.Join(parts, " ")
 }
 
+func (g *Generator) getColumnType(field Field) string {
+	if field.SqlType != "" {
+		return field.SqlType
+	}
+	if sqlType, ok := typeMap[field.Type]; ok {
+		return sqlType
+	}
+	return "VARCHAR(255)"
+}
+
+func (g *Generator) getColumnConstraints(field Field) []string {
+	var constraints []string
+
+	sqlType := g.getColumnType(field)
+	if !field.Nullable && !strings.Contains(strings.ToUpper(sqlType), "DATETIME") {
+		constraints = append(constraints, "NOT NULL")
+	}
+
+	if tags := parseGormTag(field.Tag); len(tags) > 0 {
+		if val, ok := tags["default"]; ok {
+			constraints = append(constraints, fmt.Sprintf("DEFAULT %s", val))
+		}
+		if _, ok := tags["primarykey"]; ok {
+			constraints = append(constraints, "AUTO_INCREMENT")
+		}
+	}
+
+	return constraints
+}
+
 func parseGormTag(tag string) map[string]string {
 	result := make(map[string]string)
-	if !strings.Contains(tag, "gorm") {
+	if !strings.Contains(tag, "gorm:\"") {
 		return result
 	}
 
@@ -335,6 +339,19 @@ func parseGormTag(tag string) map[string]string {
 			result[pair] = "true"
 		}
 	}
-
 	return result
+}
+
+func (g *Generator) generateSQLFileName() string {
+	parts := []string{
+		g.config.SQLConfig.Filename,
+		g.config.SQLConfig.Version,
+	}
+
+	if parts[0] == "" {
+		parts[0] = fmt.Sprintf("create_%s_tables", strings.ToLower(g.config.Module))
+	}
+
+	parts = append(parts[:2], time.Now().Format("20060102_150405"))
+	return strings.Join(parts, "_") + ".sql"
 }
