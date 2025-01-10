@@ -320,26 +320,6 @@ func (g *Generator) getColumnConstraints(field Field) []string {
 	return constraints
 }
 
-func parseGormTag(tag string) map[string]string {
-	result := make(map[string]string)
-	if !strings.Contains(tag, "gorm:\"") {
-		return result
-	}
-
-	gormTag := strings.Split(strings.Split(tag, "gorm:\"")[1], "\"")[0]
-	for _, pair := range strings.Split(gormTag, ";") {
-		if pair == "" {
-			continue
-		}
-		if i := strings.IndexByte(pair, ':'); i > 0 {
-			result[pair[:i]] = pair[i+1:]
-		} else {
-			result[pair] = "true"
-		}
-	}
-	return result
-}
-
 func (g *Generator) generateSQLFileName() string {
 	parts := []string{
 		g.config.SQLConfig.Filename,
