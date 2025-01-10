@@ -4,6 +4,19 @@
 
 一个基于 Fiber 框架的生产级 Go web 应用脚手架，采用清晰架构设计。
 
+## 最近更新
+
+- JWT认证系统优化
+  - 增强了令牌安全性
+  - 改进了认证流程
+- Zap日志系统增强
+  - 新增异步日志支持
+  - 修复Windows平台日志输出问题
+- 错误处理机制优化
+- 新增验证层
+- 路由模块化改进
+- 引导程序优化
+
 ## 特性
 
 - 清晰架构
@@ -317,7 +330,7 @@ if acquired {
     cancel, err := lock.AutoRefresh(ctx, time.Second)
     defer cancel()
     
-    // 在这���执行工作...
+    // 在这执行工作...
     
     // 释放锁
     err = lock.Unlock(ctx)

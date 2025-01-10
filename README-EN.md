@@ -4,6 +4,19 @@ English| [简体中文](README.md)
 
 A production-ready Go web application scaffold using Fiber framework with clean architecture.
 
+## Recent Updates
+
+- JWT Authentication System Enhancement
+  - Improved token security
+  - Enhanced authentication flow
+- Zap Logger Improvements
+  - Added asynchronous logging support
+  - Fixed logging output issues on Windows platform
+- Error handling mechanism optimization
+- Added validation layer
+- Router modularization improvements
+- Bootstrap program optimization
+
 ## Features
 
 - Clean Architecture
@@ -35,7 +48,7 @@ A production-ready Go web application scaffold using Fiber framework with clean 
 - Zap Logger Integration
   - Environment-based configuration
   - File and console output
-  - Log rotation by date
+  - Date-based log rotation
   - Structured logging
 - Generic Utility Packages
   - Slice operations (Map, Filter, Reduce, etc.)
