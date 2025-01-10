@@ -34,9 +34,11 @@ entities:
     fields:
       - name: ID
         type: uint
-        tag: 'json:"id" gorm:"primarykey"'
+        tag: 'json:"id"'
         comment: 主键ID
         nullable: false
+        primary_key: true
+        auto_incr: true
       - name: Username
         type: string
         tag: 'json:"username" gorm:"size:50;not null"'
@@ -58,9 +60,10 @@ entities:
       - name: Status
         type: int8
         sql_type: TINYINT(3)
-        tag: 'json:"status" gorm:"size:1;default:1"'
+        tag: 'json:"status"'
         comment: 状态
         nullable: false
+        default: "1"
       - name: CreatedAt
         type: time.Time
         tag: 'json:"created_at" gorm:"not null"'

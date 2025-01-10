@@ -228,7 +228,7 @@ func (g *Generator) generateColumns(fields []Field) ([]string, []string) {
 
 	for _, field := range fields {
 		columns = append(columns, g.generateColumnDef(field))
-		if tags := parseGormTag(field.Tag); tags["primarykey"] == "true" {
+		if field.PrimaryKey {
 			primaryKeys = append(primaryKeys, field.Name)
 		}
 	}
@@ -305,18 +305,16 @@ func (g *Generator) getColumnType(field Field) string {
 func (g *Generator) getColumnConstraints(field Field) []string {
 	var constraints []string
 
-	sqlType := g.getColumnType(field)
-	if !field.Nullable && !strings.Contains(strings.ToUpper(sqlType), "DATETIME") {
+	if !field.Nullable {
 		constraints = append(constraints, "NOT NULL")
 	}
 
-	if tags := parseGormTag(field.Tag); len(tags) > 0 {
-		if val, ok := tags["default"]; ok {
-			constraints = append(constraints, fmt.Sprintf("DEFAULT %s", val))
-		}
-		if _, ok := tags["primarykey"]; ok {
-			constraints = append(constraints, "AUTO_INCREMENT")
-		}
+	if field.AutoIncr {
+		constraints = append(constraints, "AUTO_INCREMENT")
+	}
+
+	if field.Default != "" {
+		constraints = append(constraints, fmt.Sprintf("DEFAULT %s", field.Default))
 	}
 
 	return constraints
