@@ -39,8 +39,9 @@ entities:
         sql_type: VARCHAR(100)
         nullable: false
       - name: Status
-        type: int
-        tag: 'json:"status" gorm:"default:1"'
+        type: int8
+        sql_type: TINYINT(3)
+        tag: 'json:"status" gorm:"size:1;default:1"'
         comment: 状态
         nullable: false
       - name: CreatedAt

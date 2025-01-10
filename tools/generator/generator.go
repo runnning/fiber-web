@@ -21,15 +21,31 @@ const (
 
 // SQL类型映射
 var typeMap = map[string]string{
-	"string":         "VARCHAR(255)",
-	"int":            "INT",
-	"uint":           "INT UNSIGNED",
-	"int64":          "BIGINT",
-	"uint64":         "BIGINT UNSIGNED",
-	"float64":        "DOUBLE",
-	"bool":           "TINYINT(1)",
+	// 基础类型
+	"string":  "VARCHAR(255)",
+	"int":     "INT",
+	"uint":    "INT UNSIGNED",
+	"int8":    "TINYINT",
+	"uint8":   "TINYINT UNSIGNED",
+	"int16":   "SMALLINT",
+	"uint16":  "SMALLINT UNSIGNED",
+	"int32":   "INT",
+	"uint32":  "INT UNSIGNED",
+	"int64":   "BIGINT",
+	"uint64":  "BIGINT UNSIGNED",
+	"float32": "FLOAT",
+	"float64": "DOUBLE",
+	"bool":    "TINYINT(1)",
+
+	// 时间相关
 	"time.Time":      "DATETIME",
 	"gorm.DeletedAt": "DATETIME",
+
+	// 字节切片
+	"[]byte": "BLOB",
+
+	// JSON
+	"json.RawMessage": "JSON",
 }
 
 // TemplateData 模板数据
