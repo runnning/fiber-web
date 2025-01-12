@@ -1,5 +1,5 @@
-# 用户模块配置
-module: user
+# admin模块配置
+module: admin
 db_engine: InnoDB
 db_charset: utf8mb4
 
