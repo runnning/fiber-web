@@ -102,14 +102,14 @@ func (g *Generator) Generate() error {
 // 内部辅助方法
 
 func (g *Generator) initTemplates() error {
-	templates := map[string]string{
+	templateStrings := map[string]string{
 		dirEntity:     templates.EntityTemplate,
 		dirRepository: templates.RepositoryTemplate,
 		dirUsecase:    templates.UseCaseTemplate,
 		dirEndpoint:   templates.EndpointTemplate,
 	}
 
-	for name, content := range templates {
+	for name, content := range templateStrings {
 		tmpl, err := template.New(name).Parse(content)
 		if err != nil {
 			return fmt.Errorf("解析模板 %s 失败: %v", name, err)
