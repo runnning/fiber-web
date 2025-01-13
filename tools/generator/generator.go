@@ -19,34 +19,41 @@ const (
 	dirSQL        = "sql"
 )
 
-// SQL类型映射
-var typeMap = map[string]string{
-	// 基础类型
-	"string":  "VARCHAR(255)",
-	"int":     "INT",
-	"uint":    "INT UNSIGNED",
-	"int8":    "TINYINT",
-	"uint8":   "TINYINT UNSIGNED",
-	"int16":   "SMALLINT",
-	"uint16":  "SMALLINT UNSIGNED",
-	"int32":   "INT",
-	"uint32":  "INT UNSIGNED",
-	"int64":   "BIGINT",
-	"uint64":  "BIGINT UNSIGNED",
-	"float32": "FLOAT",
-	"float64": "DOUBLE",
-	"bool":    "TINYINT(1)",
+var (
+	// SQL类型映射
+	typeMap = map[string]string{
+		// 基础类型
+		"string":  "VARCHAR(255)",
+		"int":     "INT",
+		"uint":    "INT UNSIGNED",
+		"int8":    "TINYINT",
+		"uint8":   "TINYINT UNSIGNED",
+		"int16":   "SMALLINT",
+		"uint16":  "SMALLINT UNSIGNED",
+		"int32":   "INT",
+		"uint32":  "INT UNSIGNED",
+		"int64":   "BIGINT",
+		"uint64":  "BIGINT UNSIGNED",
+		"float32": "FLOAT",
+		"float64": "DOUBLE",
+		"bool":    "TINYINT(1)",
 
-	// 时间相关
-	"time.Time":      "DATETIME",
-	"gorm.DeletedAt": "DATETIME",
+		// 时间相关
+		"time.Time":      "DATETIME",
+		"gorm.DeletedAt": "DATETIME",
 
-	// 字节切片
-	"[]byte": "BLOB",
+		// 字节切片
+		"[]byte": "BLOB",
 
-	// JSON
-	"json.RawMessage": "JSON",
-}
+		// JSON
+		"json.RawMessage": "JSON",
+	}
+
+	// 索引后缀
+	indexSuffix = map[bool]string{true: "unique", false: "idx"}
+	// 索引类型
+	indexType = map[bool]string{true: "UNIQUE KEY", false: "KEY"}
+)
 
 // TemplateData 模板数据
 type TemplateData struct {
@@ -243,12 +250,10 @@ func (g *Generator) writePrimaryKey(b *strings.Builder, primaryKeys []string) {
 
 func (g *Generator) writeIndexes(b *strings.Builder, entity Entity) {
 	for _, idx := range entity.Indexes {
-		indexSuffix := map[bool]string{true: "unique", false: "idx"}[idx.Unique]
-		indexName := fmt.Sprintf("%s_%s_%s", entity.TableName, idx.Name, indexSuffix)
-		indexType := map[bool]string{true: "UNIQUE KEY", false: "KEY"}[idx.Unique]
+		indexName := fmt.Sprintf("%s_%s_%s", entity.TableName, idx.Name, indexSuffix[idx.Unique])
 
 		b.WriteString(fmt.Sprintf(",\n  %s `%s` (%s)",
-			indexType,
+			indexType[idx.Unique],
 			indexName,
 			strings.Join(idx.Fields, ","),
 		))
