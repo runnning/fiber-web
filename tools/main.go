@@ -17,24 +17,18 @@ func main() {
 	}
 
 	// 加载配置
-	config, err := generator.LoadConfig(*configFile)
+	err := generator.LoadConfig(*configFile)
 	if err != nil {
 		fmt.Printf("加载配置文件失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 验证配置
-	if err := generator.ValidateConfig(config); err != nil {
-		fmt.Printf("配置验证失败: %v\n", err)
-		os.Exit(1)
-	}
-
 	// 创建生成器并生成代码
-	gen := generator.NewGenerator(config)
+	gen := generator.NewGenerator(generator.Data)
 	if err := gen.Generate(); err != nil {
 		fmt.Printf("生成失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("成功在模块 %s 中生成所有文件\n", config.Module)
+	fmt.Printf("成功在模块 %s 中生成所有文件\n", generator.Data.Module)
 }

@@ -6,8 +6,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+var Data = new(ModuleConfig)
+
 // LoadConfig 从配置文件加载配置
-func LoadConfig(configFile string) (*ModuleConfig, error) {
+func LoadConfig(configFile string) error {
 	v := viper.New()
 	v.SetConfigFile(configFile)
 
@@ -17,20 +19,19 @@ func LoadConfig(configFile string) (*ModuleConfig, error) {
 	v.SetDefault("sql_config.include_timestamp", true)
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取配置文件失败: %v", err)
+		return fmt.Errorf("读取配置文件失败: %v", err)
 	}
 
-	var config ModuleConfig
-	if err := v.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("解析配置失败: %v", err)
+	if err := v.Unmarshal(Data); err != nil {
+		return fmt.Errorf("解析配置失败: %v", err)
 	}
 
 	// 验证配置
-	if err := ValidateConfig(&config); err != nil {
-		return nil, err
+	if err := ValidateConfig(Data); err != nil {
+		return err
 	}
 
-	return &config, nil
+	return nil
 }
 
 // ValidateConfig 验证配置

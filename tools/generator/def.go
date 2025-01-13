@@ -1,5 +1,14 @@
 package generator
 
+// TemplateData 模板渲染数据
+type TemplateData struct {
+	ModuleName string  // 模块名
+	Name       string  // 实体名
+	VarName    string  // 变量名(首字母小写)
+	TableName  string  // 表名
+	Fields     []Field // 字段列表
+}
+
 // Index 表示索引定义
 type Index struct {
 	Name    string   `mapstructure:"name"`    // 索引名称
