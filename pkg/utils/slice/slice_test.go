@@ -343,75 +343,162 @@ func TestInsertAt(t *testing.T) {
 }
 
 func TestCompact(t *testing.T) {
-	t.Run("compact integers", func(t *testing.T) {
+	t.Run("压缩整数切片", func(t *testing.T) {
 		slice := []int{0, 1, 0, 2, 0, 3, 0}
 		result := Compact(slice)
 		expected := []int{1, 2, 3}
 
 		if !reflect.DeepEqual(result, expected) {
-			t.Errorf("Expected %v, got %v", expected, result)
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
 		}
 	})
 
-	t.Run("compact strings", func(t *testing.T) {
+	t.Run("压缩字符串切片", func(t *testing.T) {
 		slice := []string{"", "a", "", "b", "c", ""}
 		result := Compact(slice)
 		expected := []string{"a", "b", "c"}
 
 		if !reflect.DeepEqual(result, expected) {
-			t.Errorf("Expected %v, got %v", expected, result)
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
 		}
 	})
 }
 
 func TestEqual(t *testing.T) {
-	t.Run("equal slices", func(t *testing.T) {
+	t.Run("相等的切片", func(t *testing.T) {
 		slice1 := []int{1, 2, 3}
 		slice2 := []int{1, 2, 3}
 		if !Equal(slice1, slice2) {
-			t.Error("Expected slices to be equal")
+			t.Error("期望切片相等")
 		}
 	})
 
-	t.Run("unequal slices", func(t *testing.T) {
+	t.Run("不相等的切片", func(t *testing.T) {
 		slice1 := []int{1, 2, 3}
 		slice2 := []int{1, 3, 2}
 		if Equal(slice1, slice2) {
-			t.Error("Expected slices to be unequal")
+			t.Error("期望切片不相等")
 		}
 	})
 
-	t.Run("different length slices", func(t *testing.T) {
+	t.Run("长度不同的切片", func(t *testing.T) {
 		slice1 := []int{1, 2, 3}
 		slice2 := []int{1, 2}
 		if Equal(slice1, slice2) {
-			t.Error("Expected slices of different lengths to be unequal")
+			t.Error("期望不同长度的切片不相等")
 		}
 	})
 }
 
 func TestEqualUnordered(t *testing.T) {
-	t.Run("equal unordered slices", func(t *testing.T) {
+	t.Run("无序相等的切片", func(t *testing.T) {
 		slice1 := []int{1, 2, 3}
 		slice2 := []int{3, 1, 2}
 		if !EqualUnordered(slice1, slice2) {
-			t.Error("Expected slices to be equal regardless of order")
+			t.Error("期望切片在无序情况下相等")
 		}
 	})
 
-	t.Run("unequal slices", func(t *testing.T) {
+	t.Run("不相等的切片", func(t *testing.T) {
 		slice1 := []int{1, 2, 3}
 		slice2 := []int{1, 2, 4}
 		if EqualUnordered(slice1, slice2) {
-			t.Error("Expected slices to be unequal")
+			t.Error("期望切片不相等")
 		}
 	})
 
-	t.Run("slices with duplicates", func(t *testing.T) {
+	t.Run("带重复元素的切片", func(t *testing.T) {
 		slice1 := []int{1, 2, 2, 3}
 		slice2 := []int{2, 1, 3, 2}
 		if !EqualUnordered(slice1, slice2) {
-			t.Error("Expected slices with same elements and duplicates to be equal")
+			t.Error("期望具有相同元素和重复的切片相等")
+		}
+	})
+}
+
+func TestFind(t *testing.T) {
+	t.Run("查找整数", func(t *testing.T) {
+		slice := []int{1, 2, 3, 4, 5}
+		result, found := Find(slice, func(x int) bool { return x > 3 })
+		if !found {
+			t.Error("期望找到大于3的数")
+		}
+		if result != 4 {
+			t.Errorf("期望得到 4，实际得到 %v", result)
+		}
+	})
+
+	t.Run("查找字符串", func(t *testing.T) {
+		slice := []string{"apple", "banana", "cherry"}
+		result, found := Find(slice, func(s string) bool { return len(s) > 5 })
+		if !found {
+			t.Error("期望找到长度大于5的字符串")
+		}
+		if result != "banana" {
+			t.Errorf("期望得到 'banana'，实际得到 %v", result)
+		}
+	})
+
+	t.Run("未找到元素", func(t *testing.T) {
+		slice := []int{1, 2, 3, 4, 5}
+		_, found := Find(slice, func(x int) bool { return x > 10 })
+		if found {
+			t.Error("不应该找到大于10的数")
+		}
+	})
+}
+
+func TestSort(t *testing.T) {
+	t.Run("排序整数", func(t *testing.T) {
+		input := []int{5, 2, 8, 1, 9}
+		result := Sort(input)
+		expected := []int{1, 2, 5, 8, 9}
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+
+		// 验证原切片未被修改
+		if reflect.DeepEqual(input, result) {
+			t.Error("原切片不应被修改")
+		}
+	})
+
+	t.Run("排序浮点数", func(t *testing.T) {
+		input := []float64{5.5, 2.2, 8.8, 1.1, 9.9}
+		result := Sort(input)
+		expected := []float64{1.1, 2.2, 5.5, 8.8, 9.9}
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+	})
+
+	t.Run("排序字符串", func(t *testing.T) {
+		input := []string{"banana", "apple", "cherry", "date"}
+		result := Sort(input)
+		expected := []string{"apple", "banana", "cherry", "date"}
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+	})
+
+	t.Run("空切片排序", func(t *testing.T) {
+		var input []int
+		result := Sort(input)
+		if len(result) != 0 {
+			t.Error("空切片排序应返回空切片")
+		}
+	})
+
+	t.Run("单元素切片排序", func(t *testing.T) {
+		input := []int{1}
+		result := Sort(input)
+		expected := []int{1}
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
 		}
 	})
 }
