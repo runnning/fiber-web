@@ -14,14 +14,14 @@ import (
 
 const defaultTimeout = 30 * time.Second
 
-// Request HTTP request
+// Request HTTP请求
 type Request struct {
-	customRequest func(req *http.Request, data *bytes.Buffer) // used to define HEADER, e.g. to add sign, etc.
+	customRequest func(req *http.Request, data *bytes.Buffer) // 用于定义请求头，例如添加签名等
 	url           string
-	params        map[string]interface{} // parameters after URL
-	body          string                 // Body data
-	bodyJSON      interface{}            // JSON marshal body data
-	timeout       time.Duration          // Client timeout
+	params        map[string]interface{} // URL后的参数
+	body          string                 // 请求体数据
+	bodyJSON      interface{}            // JSON格式的请求体数据
+	timeout       time.Duration          // 客户端超时时间
 	headers       map[string]string
 
 	request  *http.Request
@@ -30,20 +30,20 @@ type Request struct {
 	err      error
 }
 
-// Response HTTP response
+// Response HTTP响应
 type Response struct {
 	*http.Response
 	err error
 }
 
-// -----------------------------------  Request way 1 -----------------------------------
+// -----------------------------------  请求方式 1 -----------------------------------
 
-// New create a new Request
+// New 创建一个新的请求
 func New() *Request {
 	return &Request{}
 }
 
-// Reset set all fields to default value, use at pool
+// Reset 重置所有字段为默认值，用于对象池
 func (req *Request) Reset() {
 	req.params = nil
 	req.body = ""
@@ -57,13 +57,13 @@ func (req *Request) Reset() {
 	req.err = nil
 }
 
-// SetURL set URL
+// SetURL 设置URL
 func (req *Request) SetURL(path string) *Request {
 	req.url = path
 	return req
 }
 
-// SetParams parameters after setting the URL
+// SetParams 设置URL后的参数
 func (req *Request) SetParams(params map[string]interface{}) *Request {
 	if req.params == nil {
 		req.params = params
@@ -75,7 +75,7 @@ func (req *Request) SetParams(params map[string]interface{}) *Request {
 	return req
 }
 
-// SetParam parameters after setting the URL
+// SetParam 设置URL后的参数
 func (req *Request) SetParam(k string, v interface{}) *Request {
 	if req.params == nil {
 		req.params = make(map[string]interface{})
@@ -84,7 +84,7 @@ func (req *Request) SetParam(k string, v interface{}) *Request {
 	return req
 }
 
-// SetBody set body data, support string and []byte, if it is not string, it will be json marshal.
+// SetBody 设置请求体数据，支持string和[]byte，如果不是string类型，将进行JSON序列化
 func (req *Request) SetBody(body interface{}) *Request {
 	switch v := body.(type) {
 	case string:
@@ -97,19 +97,19 @@ func (req *Request) SetBody(body interface{}) *Request {
 	return req
 }
 
-// SetTimeout set timeout
+// SetTimeout 设置超时时间
 func (req *Request) SetTimeout(t time.Duration) *Request {
 	req.timeout = t
 	return req
 }
 
-// SetContentType set ContentType
+// SetContentType 设置ContentType
 func (req *Request) SetContentType(a string) *Request {
 	req.SetHeader("Content-Type", a)
 	return req
 }
 
-// SetHeader set the value of the request header
+// SetHeader 设置请求头的值
 func (req *Request) SetHeader(k, v string) *Request {
 	if req.headers == nil {
 		req.headers = make(map[string]string)
@@ -118,7 +118,7 @@ func (req *Request) SetHeader(k, v string) *Request {
 	return req
 }
 
-// SetHeaders set the value of Request Headers
+// SetHeaders 设置请求头的值
 func (req *Request) SetHeaders(headers map[string]string) *Request {
 	if req.headers == nil {
 		req.headers = make(map[string]string)
@@ -129,43 +129,43 @@ func (req *Request) SetHeaders(headers map[string]string) *Request {
 	return req
 }
 
-// CustomRequest customize request, e.g. add sign, set header, etc.
+// CustomRequest 自定义请求，例如添加签名、设置请求头等
 func (req *Request) CustomRequest(f func(req *http.Request, data *bytes.Buffer)) *Request {
 	req.customRequest = f
 	return req
 }
 
-// GET send a GET request
+// GET 发送GET请求
 func (req *Request) GET() (*Response, error) {
 	req.method = http.MethodGet
 	return req.pull()
 }
 
-// DELETE send a DELETE request
+// DELETE 发送DELETE请求
 func (req *Request) DELETE() (*Response, error) {
 	req.method = http.MethodDelete
 	return req.pull()
 }
 
-// POST send a POST request
+// POST 发送POST请求
 func (req *Request) POST() (*Response, error) {
 	req.method = http.MethodPost
 	return req.push()
 }
 
-// PUT send a PUT request
+// PUT 发送PUT请求
 func (req *Request) PUT() (*Response, error) {
 	req.method = http.MethodPut
 	return req.push()
 }
 
-// PATCH send PATCH requests
+// PATCH 发送PATCH请求
 func (req *Request) PATCH() (*Response, error) {
 	req.method = http.MethodPatch
 	return req.push()
 }
 
-// Do a request
+// Do 执行请求
 func (req *Request) Do(method string, data interface{}) (*Response, error) {
 	req.method = method
 
@@ -175,7 +175,7 @@ func (req *Request) Do(method string, data interface{}) (*Response, error) {
 			if params, ok := data.(map[string]interface{}); ok { //nolint
 				req.SetParams(params)
 			} else {
-				req.err = errors.New("params is not a map[string]interface{}")
+				req.err = errors.New("参数不是map[string]interface{}类型")
 				return nil, req.err
 			}
 		}
@@ -190,7 +190,7 @@ func (req *Request) Do(method string, data interface{}) (*Response, error) {
 		return req.push()
 	}
 
-	req.err = errors.New("unknow method " + method)
+	req.err = errors.New("未知的请求方法 " + method)
 	return nil, req.err
 }
 
@@ -267,7 +267,7 @@ func (req *Request) send(body io.Reader, buf *bytes.Buffer) (*Response, error) {
 	return resp, resp.err
 }
 
-// Response return response
+// Response 返回响应
 func (req *Request) Response() (*Response, error) {
 	if req.err != nil {
 		return nil, req.err
@@ -275,14 +275,14 @@ func (req *Request) Response() (*Response, error) {
 	return req.response, req.response.Error()
 }
 
-// -----------------------------------  Response -----------------------------------
+// -----------------------------------  响应处理 -----------------------------------
 
-// Error return err
+// Error 返回错误
 func (resp *Response) Error() error {
 	return resp.err
 }
 
-// BodyString returns the body data of the HttpResponse
+// BodyString 返回响应体的字符串数据
 func (resp *Response) BodyString() (string, error) {
 	if resp.err != nil {
 		return "", resp.err
@@ -291,14 +291,14 @@ func (resp *Response) BodyString() (string, error) {
 	return string(body), err
 }
 
-// ReadBody returns the body data of the HttpResponse
+// ReadBody 返回响应体的数据
 func (resp *Response) ReadBody() ([]byte, error) {
 	if resp.err != nil {
 		return []byte{}, resp.err
 	}
 
 	if resp.Response == nil {
-		return []byte{}, errors.New("nil")
+		return []byte{}, errors.New("响应为空")
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -310,7 +310,7 @@ func (resp *Response) ReadBody() ([]byte, error) {
 	return body, nil
 }
 
-// BindJSON parses the response's body as JSON
+// BindJSON 将响应体解析为JSON
 func (resp *Response) BindJSON(v interface{}) error {
 	if resp.err != nil {
 		return resp.err
@@ -322,9 +322,9 @@ func (resp *Response) BindJSON(v interface{}) error {
 	return json.Unmarshal(body, v)
 }
 
-// -----------------------------------  Request way 2 -----------------------------------
+// -----------------------------------  请求方式 2 -----------------------------------
 
-// Option set options.
+// Option 设置选项
 type Option func(*options)
 
 type options struct {
@@ -343,56 +343,56 @@ func defaultOptions() *options {
 	return &options{}
 }
 
-// WithParams set params
+// WithParams 设置参数
 func WithParams(params map[string]interface{}) Option {
 	return func(o *options) {
 		o.params = params
 	}
 }
 
-// WithHeaders set headers
+// WithHeaders 设置请求头
 func WithHeaders(headers map[string]string) Option {
 	return func(o *options) {
 		o.headers = headers
 	}
 }
 
-// WithTimeout set timeout
+// WithTimeout 设置超时时间
 func WithTimeout(t time.Duration) Option {
 	return func(o *options) {
 		o.timeout = t
 	}
 }
 
-// Get request, return custom json format
+// Get 发送GET请求，返回自定义JSON格式
 func Get(result interface{}, urlStr string, opts ...Option) error {
 	o := defaultOptions()
 	o.apply(opts...)
 	return gDo("GET", result, urlStr, o.params, o.headers, o.timeout)
 }
 
-// Delete request, return custom json format
+// Delete 发送DELETE请求，返回自定义JSON格式
 func Delete(result interface{}, urlStr string, opts ...Option) error {
 	o := defaultOptions()
 	o.apply(opts...)
 	return gDo("DELETE", result, urlStr, o.params, o.headers, o.timeout)
 }
 
-// Post request, return custom json format
+// Post 发送POST请求，返回自定义JSON格式
 func Post(result interface{}, urlStr string, body interface{}, opts ...Option) error {
 	o := defaultOptions()
 	o.apply(opts...)
 	return do("POST", result, urlStr, body, o.params, o.headers, o.timeout)
 }
 
-// Put request, return custom json format
+// Put 发送PUT请求，返回自定义JSON格式
 func Put(result interface{}, urlStr string, body interface{}, opts ...Option) error {
 	o := defaultOptions()
 	o.apply(opts...)
 	return do("PUT", result, urlStr, body, o.params, o.headers, o.timeout)
 }
 
-// Patch request, return custom json format
+// Patch 发送PATCH请求，返回自定义JSON格式
 func Patch(result interface{}, urlStr string, body interface{}, opts ...Option) error {
 	o := defaultOptions()
 	o.apply(opts...)
@@ -484,12 +484,12 @@ func gDo(method string, result interface{}, urlStr string, params KV, headers ma
 	return nil
 }
 
-// StdResult standard return data
+// StdResult 标准返回数据
 type StdResult struct {
 	Code int         `json:"code"`
 	Msg  string      `json:"msg"`
 	Data interface{} `json:"data,omitempty"`
 }
 
-// KV string:interface{}
+// KV 字符串:接口类型映射
 type KV = map[string]interface{}
