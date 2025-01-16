@@ -86,3 +86,59 @@ func Omit[K comparable, V any](m map[K]V, keys []K) map[K]V {
 	}
 	return result
 }
+
+// HasKey checks if a key exists in the map
+func HasKey[K comparable, V any](m map[K]V, key K) bool {
+	_, ok := m[key]
+	return ok
+}
+
+// HasValue checks if a value exists in the map
+func HasValue[K comparable, V comparable](m map[K]V, value V) bool {
+	for _, v := range m {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+// GetOrDefault returns the value for key if present, otherwise returns defaultValue
+func GetOrDefault[K comparable, V any](m map[K]V, key K, defaultValue V) V {
+	if v, ok := m[key]; ok {
+		return v
+	}
+	return defaultValue
+}
+
+// Update updates multiple keys in the map with their corresponding values
+func Update[K comparable, V any](m map[K]V, updates map[K]V) {
+	for k, v := range updates {
+		m[k] = v
+	}
+}
+
+// DeleteKeys deletes multiple keys from the map
+func DeleteKeys[K comparable, V any](m map[K]V, keys []K) {
+	for _, k := range keys {
+		delete(m, k)
+	}
+}
+
+// GroupByValue groups keys by their values
+func GroupByValue[K comparable, V comparable](m map[K]V) map[V][]K {
+	result := make(map[V][]K)
+	for k, v := range m {
+		result[v] = append(result[v], k)
+	}
+	return result
+}
+
+// Clone returns a shallow copy of the map
+func Clone[K comparable, V any](m map[K]V) map[K]V {
+	result := make(map[K]V, len(m))
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}
