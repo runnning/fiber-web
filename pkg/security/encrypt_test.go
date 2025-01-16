@@ -25,7 +25,7 @@ func TestMD5(t *testing.T) {
 		{
 			name:     "Complex string",
 			input:    "Password123!@#",
-			expected: "42f749ade7f9e195bf475f37a44cafcb",
+			expected: "5dd51113856956e6d9cc84d7834600fc",
 		},
 	}
 
