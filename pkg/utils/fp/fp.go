@@ -1,6 +1,6 @@
 package fp
 
-// Pipe chains multiple functions together, passing the output of one to the input of the next
+// Pipe 将多个函数串联在一起，将一个函数的输出作为下一个函数的输入
 func Pipe[T any](f func(T) T) func(func(T) T) func(T) T {
 	return func(g func(T) T) func(T) T {
 		return func(x T) T {
@@ -9,7 +9,7 @@ func Pipe[T any](f func(T) T) func(func(T) T) func(T) T {
 	}
 }
 
-// Compose composes multiple functions from right to left
+// Compose 从右到左组合多个函数
 func Compose[T any](fns ...func(T) T) func(T) T {
 	return func(x T) T {
 		result := x
@@ -20,7 +20,7 @@ func Compose[T any](fns ...func(T) T) func(T) T {
 	}
 }
 
-// Curry converts a function that takes multiple arguments into a series of functions that each take a single argument
+// Curry 将接受多个参数的函数转换为一系列只接受单个参数的函数
 func Curry[T, U, V any](f func(T, U) V) func(T) func(U) V {
 	return func(t T) func(U) V {
 		return func(u U) V {
@@ -29,7 +29,7 @@ func Curry[T, U, V any](f func(T, U) V) func(T) func(U) V {
 	}
 }
 
-// Memoize creates a memoized version of a function
+// Memoize 创建函数的记忆化版本，缓存计算结果
 func Memoize[T comparable, V any](f func(T) V) func(T) V {
 	cache := make(map[T]V)
 	return func(t T) V {
@@ -42,60 +42,60 @@ func Memoize[T comparable, V any](f func(T) V) func(T) V {
 	}
 }
 
-// Partial returns a new function with some arguments pre-filled
+// Partial 返回一个新函数，其中一些参数已预先填充
 func Partial[T, U, V any](f func(T, U) V, t T) func(U) V {
 	return func(u U) V {
 		return f(t, u)
 	}
 }
 
-// Chain allows method chaining for any type
+// Chain 允许对任意类型进行方法链式调用
 type Chain[T any] struct {
 	value T
 }
 
-// NewChain creates a new Chain
+// NewChain 创建一个新的链式调用对象
 func NewChain[T any](initial T) Chain[T] {
 	return Chain[T]{value: initial}
 }
 
-// Map applies a function to the chain value
+// Map 对链式调用中的值应用函数
 func (c Chain[T]) Map(f func(T) T) Chain[T] {
 	return Chain[T]{value: f(c.value)}
 }
 
-// Value returns the final value in the chain
+// Value 返回链式调用的最终值
 func (c Chain[T]) Value() T {
 	return c.value
 }
 
-// Either represents a value that can be one of two types
+// Either 表示可以是两种类型之一的值
 type Either[L, R any] struct {
 	left  *L
 	right *R
 }
 
-// Left creates a new Either with a left value
+// Left 创建一个包含左值的 Either
 func Left[L, R any](l L) Either[L, R] {
 	return Either[L, R]{left: &l}
 }
 
-// Right creates a new Either with a right value
+// Right 创建一个包含右值的 Either
 func Right[L, R any](r R) Either[L, R] {
 	return Either[L, R]{right: &r}
 }
 
-// IsLeft returns true if the Either contains a left value
+// IsLeft 如果 Either 包含左值则返回 true
 func (e Either[L, R]) IsLeft() bool {
 	return e.left != nil
 }
 
-// IsRight returns true if the Either contains a right value
+// IsRight 如果 Either 包含右值则返回 true
 func (e Either[L, R]) IsRight() bool {
 	return e.right != nil
 }
 
-// Match pattern matches on an Either
+// Match 对 Either 进行模式匹配
 func (e Either[L, R]) Match(leftFn func(L), rightFn func(R)) {
 	if e.IsLeft() {
 		leftFn(*e.left)
@@ -104,40 +104,40 @@ func (e Either[L, R]) Match(leftFn func(L), rightFn func(R)) {
 	}
 }
 
-// Option represents an optional value
+// Option 表示一个可选值
 type Option[T any] struct {
 	value *T
 }
 
-// Some creates a new Option with a value
+// Some 创建一个包含值的 Option
 func Some[T any](t T) Option[T] {
 	return Option[T]{value: &t}
 }
 
-// None creates a new Option with no value
+// None 创建一个不包含值的 Option
 func None[T any]() Option[T] {
 	return Option[T]{value: nil}
 }
 
-// IsSome returns true if the Option contains a value
+// IsSome 如果 Option 包含值则返回 true
 func (o Option[T]) IsSome() bool {
 	return o.value != nil
 }
 
-// IsNone returns true if the Option contains no value
+// IsNone 如果 Option 不包含值则返回 true
 func (o Option[T]) IsNone() bool {
 	return o.value == nil
 }
 
-// Unwrap returns the contained value or panics if none
+// Unwrap 返回包含的值，如果没有值则触发 panic
 func (o Option[T]) Unwrap() T {
 	if o.IsNone() {
-		panic("called unwrap on None value")
+		panic("对空值调用了 Unwrap")
 	}
 	return *o.value
 }
 
-// UnwrapOr returns the contained value or a default
+// UnwrapOr 返回包含的值，如果没有值则返回默认值
 func (o Option[T]) UnwrapOr(default_ T) T {
 	if o.IsNone() {
 		return default_

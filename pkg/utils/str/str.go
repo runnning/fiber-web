@@ -26,7 +26,7 @@ func RandomBytes(length int) []byte {
 }
 
 // CamelCase 将字符串转换为驼峰命名
-// example: hello_world -> helloWorld
+// 示例: hello_world -> helloWorld
 func CamelCase(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -56,8 +56,8 @@ func CamelCase(s string) string {
 	return n.String()
 }
 
-// SnakeCase 将符串转换为蛇形命名
-// example: helloWorld -> hello_world
+// SnakeCase 将字符串转换为蛇形命名
+// 示例: helloWorld -> hello_world
 func SnakeCase(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -76,8 +76,8 @@ func SnakeCase(s string) string {
 	return n.String()
 }
 
-// KebabCase 将字符串转换为kebab命名
-// example: helloWorld -> hello-world
+// KebabCase 将字符串转换为 kebab 命名
+// 示例: helloWorld -> hello-world
 func KebabCase(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -96,7 +96,7 @@ func KebabCase(s string) string {
 	return n.String()
 }
 
-// Truncate 截断字符串到指定长度,超出部分用...替换
+// Truncate 截断字符串到指定长度，超出部分用...替换
 func Truncate(s string, length int) string {
 	if length <= 0 {
 		return ""
@@ -118,7 +118,7 @@ func Reverse(s string) string {
 	return string(runes)
 }
 
-// IsEmpty 判断字符串是否为空(包括空格)
+// IsEmpty 判断字符串是否为空（包括空格）
 func IsEmpty(s string) bool {
 	return len(strings.TrimSpace(s)) == 0
 }

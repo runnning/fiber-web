@@ -1,6 +1,6 @@
 package maps
 
-// Keys returns a slice of all keys in the map
+// Keys 返回 map 中所有的键
 func Keys[K comparable, V any](m map[K]V) []K {
 	keys := make([]K, 0, len(m))
 	for k := range m {
@@ -9,7 +9,7 @@ func Keys[K comparable, V any](m map[K]V) []K {
 	return keys
 }
 
-// Values returns a slice of all values in the map
+// Values 返回 map 中所有的值
 func Values[K comparable, V any](m map[K]V) []V {
 	values := make([]V, 0, len(m))
 	for _, v := range m {
@@ -18,7 +18,7 @@ func Values[K comparable, V any](m map[K]V) []V {
 	return values
 }
 
-// Merge merges multiple maps into a new map
+// Merge 合并多个 map 到一个新的 map 中
 func Merge[K comparable, V any](maps ...map[K]V) map[K]V {
 	result := make(map[K]V)
 	for _, m := range maps {
@@ -29,7 +29,7 @@ func Merge[K comparable, V any](maps ...map[K]V) map[K]V {
 	return result
 }
 
-// Filter returns a new map containing only the key-value pairs that satisfy the predicate
+// Filter 返回一个新的 map，仅包含满足断言函数的键值对
 func Filter[K comparable, V any](m map[K]V, predicate func(K, V) bool) map[K]V {
 	result := make(map[K]V)
 	for k, v := range m {
@@ -40,7 +40,7 @@ func Filter[K comparable, V any](m map[K]V, predicate func(K, V) bool) map[K]V {
 	return result
 }
 
-// MapValues returns a new map with the same keys but transformed values
+// MapValues 返回一个新的 map，保持键不变，值经过转换函数处理
 func MapValues[K comparable, V, R any](m map[K]V, transform func(V) R) map[K]R {
 	result := make(map[K]R)
 	for k, v := range m {
@@ -49,7 +49,7 @@ func MapValues[K comparable, V, R any](m map[K]V, transform func(V) R) map[K]R {
 	return result
 }
 
-// Invert returns a new map with keys and values swapped
+// Invert 返回一个新的 map，键值对交换
 func Invert[K, V comparable](m map[K]V) map[V]K {
 	result := make(map[V]K)
 	for k, v := range m {
@@ -58,7 +58,7 @@ func Invert[K, V comparable](m map[K]V) map[V]K {
 	return result
 }
 
-// Pick returns a new map with only the specified keys
+// Pick 返回一个新的 map，仅包含指定的键
 func Pick[K comparable, V any](m map[K]V, keys []K) map[K]V {
 	result := make(map[K]V)
 	for _, k := range keys {
@@ -69,7 +69,7 @@ func Pick[K comparable, V any](m map[K]V, keys []K) map[K]V {
 	return result
 }
 
-// Omit returns a new map without the specified keys
+// Omit 返回一个新的 map，排除指定的键
 func Omit[K comparable, V any](m map[K]V, keys []K) map[K]V {
 	result := make(map[K]V)
 	for k, v := range m {
@@ -87,13 +87,13 @@ func Omit[K comparable, V any](m map[K]V, keys []K) map[K]V {
 	return result
 }
 
-// HasKey checks if a key exists in the map
+// HasKey 检查 map 中是否存在指定的键
 func HasKey[K comparable, V any](m map[K]V, key K) bool {
 	_, ok := m[key]
 	return ok
 }
 
-// HasValue checks if a value exists in the map
+// HasValue 检查 map 中是否存在指定的值
 func HasValue[K comparable, V comparable](m map[K]V, value V) bool {
 	for _, v := range m {
 		if v == value {
@@ -103,7 +103,7 @@ func HasValue[K comparable, V comparable](m map[K]V, value V) bool {
 	return false
 }
 
-// GetOrDefault returns the value for key if present, otherwise returns defaultValue
+// GetOrDefault 获取指定键的值，如果不存在则返回默认值
 func GetOrDefault[K comparable, V any](m map[K]V, key K, defaultValue V) V {
 	if v, ok := m[key]; ok {
 		return v
@@ -111,21 +111,21 @@ func GetOrDefault[K comparable, V any](m map[K]V, key K, defaultValue V) V {
 	return defaultValue
 }
 
-// Update updates multiple keys in the map with their corresponding values
+// Update 使用另一个 map 中的键值对更新当前 map
 func Update[K comparable, V any](m map[K]V, updates map[K]V) {
 	for k, v := range updates {
 		m[k] = v
 	}
 }
 
-// DeleteKeys deletes multiple keys from the map
+// DeleteKeys 从 map 中删除指定的多个键
 func DeleteKeys[K comparable, V any](m map[K]V, keys []K) {
 	for _, k := range keys {
 		delete(m, k)
 	}
 }
 
-// GroupByValue groups keys by their values
+// GroupByValue 根据值对键进行分组
 func GroupByValue[K comparable, V comparable](m map[K]V) map[V][]K {
 	result := make(map[V][]K)
 	for k, v := range m {
@@ -134,7 +134,7 @@ func GroupByValue[K comparable, V comparable](m map[K]V) map[V][]K {
 	return result
 }
 
-// Clone returns a shallow copy of the map
+// Clone 返回 map 的浅拷贝
 func Clone[K comparable, V any](m map[K]V) map[K]V {
 	result := make(map[K]V, len(m))
 	for k, v := range m {
