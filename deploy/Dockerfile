@@ -1,57 +1,57 @@
-# Stage 1: Build
+# 阶段 1: 构建
 FROM golang:1.22-alpine AS builder
 
-# Install build tools
+# 安装构建工具
 RUN apk add --no-cache gcc musl-dev
 
-# Set working directory
+# 设置工作目录
 WORKDIR /app
 
-# Copy go.mod and go.sum
+# 复制 go.mod 和 go.sum
 COPY go.mod go.sum ./
 
-# Download dependencies
+# 下载依赖
 RUN go mod download
 
-# Copy source code
+# 复制源代码
 COPY . .
 
-# Build application
+# 构建应用
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o main ./apps/admin/cmd/api
 
-# Stage 2: Run
+# 阶段 2: 运行
 FROM alpine:latest
 
-# Install runtime dependencies
+# 安装运行时依赖
 RUN apk --no-cache add ca-certificates tzdata \
     && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone
     #&& apk del tzdata
 
-# Create non-root user
+# 创建非 root 用户
 #RUN adduser -D -g '' appuser
 
-# Create necessary directories
+# 创建必要的目录
 RUN mkdir -p /app/config /app/logs
     #&& chown -R appuser:appuser /app
 
 WORKDIR /app
 
-# Copy binary and config from builder
+# 从构建阶段复制二进制文件和配置
 COPY --from=builder /app/main .
 COPY --from=builder /app/apps/admin/cmd/config/config.docker.yaml /app/config/config.yaml
 
-# Use non-root user
+# 使用非 root 用户
 #USER appuser
 
-# Environment variables
+# 环境变量
 ENV APP_ENV=production \
     TZ=Asia/Shanghai \
     CONFIG_PATH=/app/config \
     CONFIG_NAME=config
 
-# Expose port
+# 暴露端口
 EXPOSE 3000
 
-# Start application
+# 启动应用
 CMD ["./main"]
