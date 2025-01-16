@@ -6,7 +6,7 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-// Contains checks if an element exists in a slice
+// Contains 检查切片中是否存在指定元素
 func Contains[T comparable](slice []T, element T) bool {
 	for _, v := range slice {
 		if v == element {
@@ -16,7 +16,7 @@ func Contains[T comparable](slice []T, element T) bool {
 	return false
 }
 
-// Map applies a function to each element in a slice and returns a new slice
+// Map 对切片中的每个元素应用函数并返回新切片
 func Map[T, U any](slice []T, f func(T) U) []U {
 	result := make([]U, len(slice))
 	for i, v := range slice {
@@ -25,7 +25,7 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 	return result
 }
 
-// Filter returns a new slice containing only the elements that satisfy the predicate
+// Filter 返回一个新切片，仅包含满足断言函数的元素
 func Filter[T any](slice []T, predicate func(T) bool) []T {
 	var result []T
 	for _, v := range slice {
@@ -36,7 +36,7 @@ func Filter[T any](slice []T, predicate func(T) bool) []T {
 	return result
 }
 
-// Reduce reduces a slice to a single value using an accumulator function
+// Reduce 使用累加器函数将切片归约为单个值
 func Reduce[T, U any](slice []T, initial U, f func(U, T) U) U {
 	result := initial
 	for _, v := range slice {
@@ -45,7 +45,7 @@ func Reduce[T, U any](slice []T, initial U, f func(U, T) U) U {
 	return result
 }
 
-// Find returns the first element that satisfies the predicate and true if found
+// Find 返回第一个满足断言函数的元素和是否找到的标志
 func Find[T any](slice []T, predicate func(T) bool) (T, bool) {
 	for _, v := range slice {
 		if predicate(v) {
@@ -56,7 +56,7 @@ func Find[T any](slice []T, predicate func(T) bool) (T, bool) {
 	return zero, false
 }
 
-// Unique returns a new slice with duplicate elements removed
+// Unique 返回一个新切片，去除重复元素
 func Unique[T comparable](slice []T) []T {
 	seen := make(map[T]struct{})
 	var result []T
@@ -69,7 +69,7 @@ func Unique[T comparable](slice []T) []T {
 	return result
 }
 
-// Sort sorts a slice in ascending order
+// Sort 对切片进行升序排序
 func Sort[T constraints.Ordered](slice []T) []T {
 	result := make([]T, len(slice))
 	copy(result, slice)
@@ -77,6 +77,7 @@ func Sort[T constraints.Ordered](slice []T) []T {
 	return result
 }
 
+// quickSort 快速排序实现
 func quickSort[T constraints.Ordered](slice []T, low, high int) {
 	if low < high {
 		pivot := partition[T](slice, low, high)
@@ -85,6 +86,7 @@ func quickSort[T constraints.Ordered](slice []T, low, high int) {
 	}
 }
 
+// partition 快速排序的分区函数
 func partition[T constraints.Ordered](slice []T, low, high int) int {
 	pivot := slice[high]
 	i := low - 1
@@ -98,7 +100,7 @@ func partition[T constraints.Ordered](slice []T, low, high int) int {
 	return i + 1
 }
 
-// Chunk splits a slice into chunks of specified size
+// Chunk 将切片分割成指定大小的块
 func Chunk[T any](slice []T, size int) [][]T {
 	if size <= 0 {
 		return nil
@@ -114,7 +116,7 @@ func Chunk[T any](slice []T, size int) [][]T {
 	return chunks
 }
 
-// Reverse returns a new slice with elements in reverse order
+// Reverse 返回一个新切片，元素顺序相反
 func Reverse[T any](slice []T) []T {
 	result := make([]T, len(slice))
 	for i, v := range slice {
@@ -123,7 +125,7 @@ func Reverse[T any](slice []T) []T {
 	return result
 }
 
-// Intersection returns a new slice containing elements that exist in both slices
+// Intersection 返回一个新切片，包含两个切片中都存在的元素
 func Intersection[T comparable](slice1, slice2 []T) []T {
 	set := make(map[T]struct{})
 	var result []T
@@ -141,7 +143,7 @@ func Intersection[T comparable](slice1, slice2 []T) []T {
 	return Unique(result)
 }
 
-// Difference returns a new slice containing elements that exist in slice1 but not in slice2
+// Difference 返回一个新切片，包含在 slice1 中但不在 slice2 中的元素
 func Difference[T comparable](slice1, slice2 []T) []T {
 	set := make(map[T]struct{})
 	for _, v := range slice2 {
@@ -154,7 +156,7 @@ func Difference[T comparable](slice1, slice2 []T) []T {
 	})
 }
 
-// GroupBy groups slice elements by key generated from keyFunc
+// GroupBy 根据键函数对切片元素进行分组
 func GroupBy[T any, K comparable](slice []T, keyFunc func(T) K) map[K][]T {
 	result := make(map[K][]T)
 	for _, v := range slice {
@@ -164,7 +166,7 @@ func GroupBy[T any, K comparable](slice []T, keyFunc func(T) K) map[K][]T {
 	return result
 }
 
-// ToMap converts a slice to map using keyFunc to generate keys
+// ToMap 使用键函数将切片转换为映射
 func ToMap[T any, K comparable](slice []T, keyFunc func(T) K) map[K]T {
 	result := make(map[K]T)
 	for _, v := range slice {
@@ -173,7 +175,7 @@ func ToMap[T any, K comparable](slice []T, keyFunc func(T) K) map[K]T {
 	return result
 }
 
-// Union returns a new slice containing unique elements from all input slices
+// Union 返回一个新切片，包含所有输入切片中的唯一元素
 func Union[T comparable](slices ...[]T) []T {
 	set := make(map[T]struct{})
 	var result []T
@@ -188,7 +190,7 @@ func Union[T comparable](slices ...[]T) []T {
 	return result
 }
 
-// Shuffle returns a new slice with elements in random order
+// Shuffle 返回一个新切片，元素顺序随机
 func Shuffle[T any](slice []T) []T {
 	result := make([]T, len(slice))
 	copy(result, slice)
@@ -199,7 +201,7 @@ func Shuffle[T any](slice []T) []T {
 	return result
 }
 
-// DeleteAt removes element at index from slice
+// DeleteAt 从切片中删除指定索引的元素
 func DeleteAt[T any](slice []T, index int) []T {
 	if index < 0 || index >= len(slice) {
 		return slice
@@ -207,7 +209,7 @@ func DeleteAt[T any](slice []T, index int) []T {
 	return append(slice[:index], slice[index+1:]...)
 }
 
-// InsertAt inserts element at index in slice
+// InsertAt 在切片的指定索引处插入元素
 func InsertAt[T any](slice []T, index int, element T) []T {
 	if index < 0 || index > len(slice) {
 		return slice
@@ -218,7 +220,7 @@ func InsertAt[T any](slice []T, index int, element T) []T {
 	return slice
 }
 
-// Compact returns a new slice with zero values removed
+// Compact 返回一个新切片，移除零值元素
 func Compact[T comparable](slice []T) []T {
 	var zero T
 	return Filter(slice, func(v T) bool {
@@ -226,7 +228,7 @@ func Compact[T comparable](slice []T) []T {
 	})
 }
 
-// Equal returns true if two slices contain the same elements in the same order
+// Equal 判断两个切片是否相等（元素顺序必须相同）
 func Equal[T comparable](slice1, slice2 []T) bool {
 	if len(slice1) != len(slice2) {
 		return false
@@ -239,7 +241,7 @@ func Equal[T comparable](slice1, slice2 []T) bool {
 	return true
 }
 
-// EqualUnordered returns true if two slices contain the same elements regardless of order
+// EqualUnordered 判断两个切片是否相等（元素顺序可以不同）
 func EqualUnordered[T comparable](slice1, slice2 []T) bool {
 	if len(slice1) != len(slice2) {
 		return false
