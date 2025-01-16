@@ -6,34 +6,34 @@ import (
 	"time"
 )
 
-// Pool represents a generic worker pool
+// Pool 表示一个通用的工作池
 type Pool[T any] struct {
-	workers    int
-	tasks      chan func(context.Context) (T, error)
-	results    chan Result[T]
-	done       chan struct{}
-	ctx        context.Context
-	cancel     context.CancelFunc
-	errHandler func(error)
+	workers    int                                   // 工作协程数量
+	tasks      chan func(context.Context) (T, error) // 任务通道
+	results    chan Result[T]                        // 结果通道
+	done       chan struct{}                         // 完成信号通道
+	ctx        context.Context                       // 上下文
+	cancel     context.CancelFunc                    // 取消函数
+	errHandler func(error)                           // 错误处理函数
 }
 
-// Result represents the result of a task execution
+// Result 表示任务执行的结果
 type Result[T any] struct {
-	Value T
-	Err   error
+	Value T     // 结果值
+	Err   error // 错误信息
 }
 
-// PoolOption represents an option for configuring the pool
+// PoolOption 表示配置工作池的选项
 type PoolOption[T any] func(*Pool[T])
 
-// WithErrorHandler sets the error handler for the pool
+// WithErrorHandler 设置工作池的错误处理函数
 func WithErrorHandler[T any](handler func(error)) PoolOption[T] {
 	return func(p *Pool[T]) {
 		p.errHandler = handler
 	}
 }
 
-// NewPool creates a new worker pool
+// NewPool 创建一个新的工作池
 func NewPool[T any](workers int, bufferSize int, opts ...PoolOption[T]) *Pool[T] {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool[T]{
@@ -43,10 +43,10 @@ func NewPool[T any](workers int, bufferSize int, opts ...PoolOption[T]) *Pool[T]
 		done:       make(chan struct{}),
 		ctx:        ctx,
 		cancel:     cancel,
-		errHandler: func(err error) {}, // default error handler does nothing
+		errHandler: func(err error) {}, // 默认错误处理函数什么都不做
 	}
 
-	// Apply options
+	// 应用选项
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -54,7 +54,7 @@ func NewPool[T any](workers int, bufferSize int, opts ...PoolOption[T]) *Pool[T]
 	return p
 }
 
-// Start starts the worker pool
+// Start 启动工作池
 func (p *Pool[T]) Start() {
 	var wg sync.WaitGroup
 	for i := 0; i < p.workers; i++ {
@@ -83,7 +83,7 @@ func (p *Pool[T]) Start() {
 	}()
 }
 
-// Submit submits a task to the pool
+// Submit 提交一个任务到工作池
 func (p *Pool[T]) Submit(task func(context.Context) (T, error)) error {
 	select {
 	case <-p.ctx.Done():
@@ -93,19 +93,19 @@ func (p *Pool[T]) Submit(task func(context.Context) (T, error)) error {
 	}
 }
 
-// Results returns the results channel
+// Results 返回结果通道
 func (p *Pool[T]) Results() <-chan Result[T] {
 	return p.results
 }
 
-// Stop stops the worker pool
+// Stop 停止工作池
 func (p *Pool[T]) Stop() {
 	p.cancel()
 	close(p.tasks)
 	<-p.done // 等待所有工作完成
 }
 
-// WaitForCompletion waits for all tasks to complete with a timeout
+// WaitForCompletion 等待所有任务完成，带超时机制
 func (p *Pool[T]) WaitForCompletion(timeout time.Duration) bool {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -118,7 +118,7 @@ func (p *Pool[T]) WaitForCompletion(timeout time.Duration) bool {
 	}
 }
 
-// Parallel executes functions in parallel with context and error handling
+// Parallel 并行执行多个函数，带上下文和错误处理
 func Parallel[T any](ctx context.Context, fns ...func(context.Context) (T, error)) ([]Result[T], error) {
 	var wg sync.WaitGroup
 	results := make([]Result[T], len(fns))
@@ -141,7 +141,7 @@ func Parallel[T any](ctx context.Context, fns ...func(context.Context) (T, error
 	return results, ctx.Err()
 }
 
-// Race executes functions in parallel and returns the first successful result
+// Race 并行执行多个函数，返回第一个成功的结果
 func Race[T any](ctx context.Context, fns ...func(context.Context) (T, error)) (T, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -179,7 +179,7 @@ func Race[T any](ctx context.Context, fns ...func(context.Context) (T, error)) (
 	return zero, lastErr
 }
 
-// Debounce creates a debounced function that delays invoking fn until after wait duration
+// Debounce 创建一个防抖函数，延迟调用直到等待时间结束
 func Debounce[T any](fn func(T), wait time.Duration) func(T) {
 	var mutex sync.Mutex
 	var timer *time.Timer
@@ -198,7 +198,7 @@ func Debounce[T any](fn func(T), wait time.Duration) func(T) {
 	}
 }
 
-// Throttle creates a throttled function that only invokes fn at most once per wait duration
+// Throttle 创建一个节流函数，在指定时间内最多调用一次
 func Throttle[T any](fn func(T), wait time.Duration) func(T) {
 	var mutex sync.Mutex
 	var lastRun time.Time
@@ -215,27 +215,27 @@ func Throttle[T any](fn func(T), wait time.Duration) func(T) {
 	}
 }
 
-// SafeMap is a thread-safe map
+// SafeMap 是一个线程安全的映射
 type SafeMap[K comparable, V any] struct {
 	sync.RWMutex
 	data map[K]V
 }
 
-// NewSafeMap creates a new SafeMap
+// NewSafeMap 创建一个新的安全映射
 func NewSafeMap[K comparable, V any]() *SafeMap[K, V] {
 	return &SafeMap[K, V]{
 		data: make(map[K]V),
 	}
 }
 
-// Set sets a value in the map
+// Set 在映射中设置一个值
 func (m *SafeMap[K, V]) Set(key K, value V) {
 	m.Lock()
 	defer m.Unlock()
 	m.data[key] = value
 }
 
-// Get gets a value from the map
+// Get 从映射中获取一个值
 func (m *SafeMap[K, V]) Get(key K) (V, bool) {
 	m.RLock()
 	defer m.RUnlock()
@@ -243,20 +243,9 @@ func (m *SafeMap[K, V]) Get(key K) (V, bool) {
 	return value, ok
 }
 
-// Delete deletes a value from the map
+// Delete 从映射中删除一个值
 func (m *SafeMap[K, V]) Delete(key K) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.data, key)
-}
-
-// Range iterates over the map
-func (m *SafeMap[K, V]) Range(f func(K, V) bool) {
-	m.RLock()
-	defer m.RUnlock()
-	for k, v := range m.data {
-		if !f(k, v) {
-			break
-		}
-	}
 }
