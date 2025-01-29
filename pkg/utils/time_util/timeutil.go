@@ -97,6 +97,14 @@ func AddWorkDays(t time.Time, days int) time.Time {
 
 // DaysBetween 计算两个日期之间的天数
 func DaysBetween(t1, t2 time.Time) int {
+	// 转换为UTC时间，确保时区一致
+	t1 = t1.UTC()
+	t2 = t2.UTC()
+
+	// 获取日期部分
+	t1 = time.Date(t1.Year(), t1.Month(), t1.Day(), 0, 0, 0, 0, time.UTC)
+	t2 = time.Date(t2.Year(), t2.Month(), t2.Day(), 0, 0, 0, 0, time.UTC)
+
 	duration := t2.Sub(t1)
 	return int(duration.Hours() / 24)
 }
@@ -179,7 +187,7 @@ func RelativeTime(t time.Time) string {
 func StartOfQuarter(t time.Time) time.Time {
 	month := t.Month()
 	quarter := (month-1)/3 + 1
-	firstMonthOfQuarter := time.Month((quarter-1)*3 + 1)
+	firstMonthOfQuarter := (quarter-1)*3 + 1
 	return time.Date(t.Year(), firstMonthOfQuarter, 1, 0, 0, 0, 0, t.Location())
 }
 

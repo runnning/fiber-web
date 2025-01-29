@@ -331,3 +331,391 @@ func TestNextWorkday(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatTime(t *testing.T) {
+	t.Run("格式化时间", func(t *testing.T) {
+		timeTest := time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC)
+		result := FormatTime(timeTest)
+		expected := "15:30:45"
+
+		if result != expected {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+	})
+}
+
+func TestFormatDateTime(t *testing.T) {
+	t.Run("格式化日期时间", func(t *testing.T) {
+		dateTime := time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC)
+		result := FormatDateTime(dateTime)
+		expected := "2024-03-14 15:30:45"
+
+		if result != expected {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+	})
+}
+
+func TestParseDate(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected time.Time
+		hasError bool
+	}{
+		{
+			name:     "有效日期",
+			input:    "2024-03-14",
+			expected: time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC),
+			hasError: false,
+		},
+		{
+			name:     "无效日期格式",
+			input:    "2024/03/14",
+			hasError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseDate(tt.input)
+			if tt.hasError {
+				if err == nil {
+					t.Error("期望得到错误，但没有得到错误")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("解析日期出错: %v", err)
+				}
+				if !result.Equal(tt.expected) {
+					t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestParseDateTime(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected time.Time
+		hasError bool
+	}{
+		{
+			name:     "有效日期时间",
+			input:    "2024-03-14 15:30:45",
+			expected: time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC),
+			hasError: false,
+		},
+		{
+			name:     "无效日期时间格式",
+			input:    "2024/03/14 15:30:45",
+			hasError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseDateTime(tt.input)
+			if tt.hasError {
+				if err == nil {
+					t.Error("期望得到错误，但没有得到错误")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("解析日期时间出错: %v", err)
+				}
+				if !result.Equal(tt.expected) {
+					t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestEndOfDay(t *testing.T) {
+	t.Run("获取一天的结束时间", func(t *testing.T) {
+		input := time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC)
+		result := EndOfDay(input)
+		expected := time.Date(2024, 3, 14, 23, 59, 59, 999999999, time.UTC)
+
+		if !result.Equal(expected) {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+	})
+}
+
+func TestEndOfWeek(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected time.Time
+	}{
+		{
+			name:     "从周一开始",
+			input:    time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),           // 周一
+			expected: time.Date(2024, 1, 7, 23, 59, 59, 999999999, time.UTC), // 周日
+		},
+		{
+			name:     "从周三开始",
+			input:    time.Date(2024, 1, 3, 12, 0, 0, 0, time.UTC),           // 周三
+			expected: time.Date(2024, 1, 7, 23, 59, 59, 999999999, time.UTC), // 周日
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EndOfWeek(tt.input)
+			if !result.Equal(tt.expected) {
+				t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestStartOfMonth(t *testing.T) {
+	t.Run("获取月份的开始时间", func(t *testing.T) {
+		input := time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC)
+		result := StartOfMonth(input)
+		expected := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+
+		if !result.Equal(expected) {
+			t.Errorf("期望得到 %v，实际得到 %v", expected, result)
+		}
+	})
+}
+
+func TestEndOfMonth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected time.Time
+	}{
+		{
+			name:     "31天的月份",
+			input:    time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC),
+			expected: time.Date(2024, 3, 31, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "30天的月份",
+			input:    time.Date(2024, 4, 14, 15, 30, 45, 0, time.UTC),
+			expected: time.Date(2024, 4, 30, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "闰年2月",
+			input:    time.Date(2024, 2, 14, 15, 30, 45, 0, time.UTC),
+			expected: time.Date(2024, 2, 29, 23, 59, 59, 999999999, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EndOfMonth(tt.input)
+			if !result.Equal(tt.expected) {
+				t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestIsSameDay(t *testing.T) {
+	tests := []struct {
+		name     string
+		t1       time.Time
+		t2       time.Time
+		expected bool
+	}{
+		{
+			name:     "同一天不同时间",
+			t1:       time.Date(2024, 3, 14, 10, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC),
+			expected: true,
+		},
+		{
+			name:     "不同天",
+			t1:       time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC),
+			t2:       time.Date(2024, 3, 15, 15, 30, 45, 0, time.UTC),
+			expected: false,
+		},
+		{
+			name:     "不同月份",
+			t1:       time.Date(2024, 3, 14, 15, 30, 45, 0, time.UTC),
+			t2:       time.Date(2024, 4, 14, 15, 30, 45, 0, time.UTC),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsSameDay(tt.t1, tt.t2)
+			if result != tt.expected {
+				t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestAddWorkDays(t *testing.T) {
+	tests := []struct {
+		name     string
+		start    time.Time
+		days     int
+		expected time.Time
+	}{
+		{
+			name:     "从周一开始加3个工作日",
+			start:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), // 周一
+			days:     3,
+			expected: time.Date(2024, 1, 4, 0, 0, 0, 0, time.UTC), // 周四
+		},
+		{
+			name:     "跨越周末",
+			start:    time.Date(2024, 1, 5, 0, 0, 0, 0, time.UTC), // 周五
+			days:     2,
+			expected: time.Date(2024, 1, 9, 0, 0, 0, 0, time.UTC), // 下周二
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := AddWorkDays(tt.start, tt.days)
+			if !result.Equal(tt.expected) {
+				t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestRelativeTime(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name     string
+		t        time.Time
+		expected string
+	}{
+		{
+			name:     "刚刚",
+			t:        now.Add(-30 * time.Second),
+			expected: "刚刚",
+		},
+		{
+			name:     "几分钟前",
+			t:        now.Add(-5 * time.Minute),
+			expected: "5分钟前",
+		},
+		{
+			name:     "几小时前",
+			t:        now.Add(-3 * time.Hour),
+			expected: "3小时前",
+		},
+		{
+			name:     "昨天",
+			t:        now.Add(-36 * time.Hour),
+			expected: "昨天",
+		},
+		{
+			name:     "前天",
+			t:        now.Add(-60 * time.Hour),
+			expected: "前天",
+		},
+		{
+			name:     "几天前",
+			t:        now.Add(-120 * time.Hour),
+			expected: "5天前",
+		},
+		{
+			name:     "更早时间",
+			t:        now.Add(-240 * time.Hour),
+			expected: FormatDate(now.Add(-240 * time.Hour)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RelativeTime(tt.t)
+			if result != tt.expected {
+				t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestDaysBetween(t *testing.T) {
+	tests := []struct {
+		name     string
+		t1       time.Time
+		t2       time.Time
+		expected int
+	}{
+		{
+			name:     "同一天",
+			t1:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 1, 23, 59, 59, 0, time.UTC),
+			expected: 0,
+		},
+		{
+			name:     "相邻两天",
+			t1:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			expected: 1,
+		},
+		{
+			name:     "跨月",
+			t1:       time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+			expected: 1,
+		},
+		{
+			name:     "跨年",
+			t1:       time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expected: 1,
+		},
+		{
+			name:     "一个月",
+			t1:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+			expected: 31,
+		},
+		{
+			name:     "负数天数",
+			t1:       time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expected: -1,
+		},
+		{
+			name:     "跨时区-同一天UTC和UTC+8",
+			t1:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 1, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+			expected: 0,
+		},
+		{
+			name:     "跨时区-UTC和UTC+8相邻天",
+			t1:       time.Date(2024, 1, 1, 20, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 2, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+			expected: 1,
+		},
+		{
+			name:     "跨时区-UTC和UTC-8",
+			t1:       time.Date(2024, 1, 1, 4, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 1, 20, 0, 0, 0, time.FixedZone("UTC-8", -8*60*60)),
+			expected: 1,
+		},
+		{
+			name:     "跨时区-日期边界",
+			t1:       time.Date(2024, 1, 1, 23, 0, 0, 0, time.UTC),
+			t2:       time.Date(2024, 1, 2, 1, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DaysBetween(tt.t1, tt.t2)
+			if result != tt.expected {
+				t.Errorf("期望得到 %v，实际得到 %v", tt.expected, result)
+			}
+		})
+	}
+}
