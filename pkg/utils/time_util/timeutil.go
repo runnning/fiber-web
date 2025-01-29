@@ -2,6 +2,7 @@ package time_util
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -113,23 +114,42 @@ func Age(birthDate time.Time) int {
 
 // FormatDuration 格式化时间间隔
 func FormatDuration(d time.Duration) string {
+	if d == 0 {
+		return "0分钟"
+	}
+
+	// 处理负数时间间隔
+	if d < 0 {
+		return "-" + FormatDuration(-d)
+	}
+
+	// 处理小于1分钟的情况
+	if d < time.Minute {
+		return fmt.Sprintf("%d秒", int(d.Seconds()))
+	}
+
 	days := int(d.Hours() / 24)
 	hours := int(d.Hours()) % 24
 	minutes := int(d.Minutes()) % 60
 
+	var parts []string
+
 	if days > 0 {
-		if hours > 0 {
-			return fmt.Sprintf("%d天%d小时", days, hours)
-		}
-		return fmt.Sprintf("%d天", days)
+		parts = append(parts, fmt.Sprintf("%d天", days))
 	}
 	if hours > 0 {
-		if minutes > 0 {
-			return fmt.Sprintf("%d小时%d分钟", hours, minutes)
-		}
-		return fmt.Sprintf("%d小时", hours)
+		parts = append(parts, fmt.Sprintf("%d小时", hours))
 	}
-	return fmt.Sprintf("%d分钟", minutes)
+	if minutes > 0 {
+		parts = append(parts, fmt.Sprintf("%d分钟", minutes))
+	}
+
+	// 如果没有任何部分（这种情况不应该发生，因为我们已经处理了0和小于1分钟的情况）
+	if len(parts) == 0 {
+		return "0分钟"
+	}
+
+	return strings.Join(parts, "")
 }
 
 // RelativeTime 获取相对时间描述
@@ -153,4 +173,70 @@ func RelativeTime(t time.Time) string {
 	default:
 		return FormatDate(t)
 	}
+}
+
+// StartOfQuarter 获取季度的开始时间
+func StartOfQuarter(t time.Time) time.Time {
+	month := t.Month()
+	quarter := (month-1)/3 + 1
+	firstMonthOfQuarter := time.Month((quarter-1)*3 + 1)
+	return time.Date(t.Year(), firstMonthOfQuarter, 1, 0, 0, 0, 0, t.Location())
+}
+
+// EndOfQuarter 获取季度的结束时间
+func EndOfQuarter(t time.Time) time.Time {
+	return EndOfDay(StartOfQuarter(t).AddDate(0, 3, -1))
+}
+
+// GetQuarter 获取指定时间所在的季度（1-4）
+func GetQuarter(t time.Time) int {
+	return int((t.Month()-1)/3 + 1)
+}
+
+// IsWorkday 判断是否是工作日（周一至周五）
+func IsWorkday(t time.Time) bool {
+	return !IsWeekend(t)
+}
+
+// WorkdaysBetween 计算两个日期之间的工作日数量
+func WorkdaysBetween(start, end time.Time) int {
+	if end.Before(start) {
+		start, end = end, start
+	}
+
+	days := 0
+	current := StartOfDay(start)
+	endDay := StartOfDay(end)
+
+	for !current.After(endDay) {
+		if IsWorkday(current) {
+			days++
+		}
+		current = current.AddDate(0, 0, 1)
+	}
+	return days
+}
+
+// ToTimestamp 获取时间戳（秒）
+func ToTimestamp(t time.Time) int64 {
+	return t.Unix()
+}
+
+// ToMilliTimestamp 获取时间戳（毫秒）
+func ToMilliTimestamp(t time.Time) int64 {
+	return t.UnixNano() / int64(time.Millisecond)
+}
+
+// IsBetween 判断时间是否在指定的时间范围内
+func IsBetween(t, start, end time.Time) bool {
+	return (t.Equal(start) || t.After(start)) && (t.Equal(end) || t.Before(end))
+}
+
+// NextWorkday 获取指定时间的下一个工作日
+func NextWorkday(t time.Time) time.Time {
+	next := t.AddDate(0, 0, 1)
+	for IsWeekend(next) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next
 }
