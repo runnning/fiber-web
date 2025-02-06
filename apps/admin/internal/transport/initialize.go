@@ -26,8 +26,8 @@ func NewRouterInitializer(app *fiber.App, uses *usecase.UseCases) *RouterInitial
 
 // InitAPIRoutes 初始化 API 路由
 func (r *RouterInitializer) InitAPIRoutes() error {
-	validator := validator.New(&validator.Config{Language: config.Data.App.Language})
-	handlers := endpoint.InitHandlers(r.uses, validator)
+	verify := validator.New(&validator.Config{Language: config.Data.App.Language})
+	handlers := endpoint.InitHandlers(r.uses, verify)
 	v1 := r.app.Group("/api/v1", middleware.CommMiddleware(config.Data.App.Env)...)
 	{
 		// 注册路由
