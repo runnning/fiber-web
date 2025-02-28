@@ -425,18 +425,23 @@ func (sq *StreamQueue) Close() error {
 	close(sq.closed)
 	sq.mu.Unlock()
 
-	// 等待所有工作协程完成
+	// 使用 channel 和 select 避免 goroutine 泄漏
 	done := make(chan struct{})
+	timer := time.NewTimer(sq.options.CloseTimeout)
+	defer timer.Stop()
+
 	go func() {
 		sq.wg.Wait()
-		close(done)
+		select {
+		case done <- struct{}{}:
+		default:
+		}
 	}()
 
-	// 设置最大等待时间
 	select {
 	case <-done:
 		return nil
-	case <-time.After(sq.options.CloseTimeout):
-		return ErrWorkerTimeout
+	case <-timer.C:
+		return fmt.Errorf("%w: timeout after %v", ErrWorkerTimeout, sq.options.CloseTimeout)
 	}
 }
