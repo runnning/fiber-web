@@ -35,6 +35,7 @@ type Consumer struct {
 	topic    string
 	channel  string
 	metrics  *metrics
+	ordered  bool
 }
 
 // Options 配置选项
@@ -48,6 +49,7 @@ type Options struct {
 	RequeueDelay      time.Duration
 	MaxAttempts       uint16
 	Compress          bool
+	OrderedConsume    bool // 是否启用顺序消费
 }
 
 // DefaultOptions 默认配置选项
@@ -61,6 +63,7 @@ var DefaultOptions = Options{
 	RequeueDelay:      time.Second * 5,
 	MaxAttempts:       5,
 	Compress:          true,
+	OrderedConsume:    false,
 }
 
 // NewProducer 创建一个新的 NSQ 生产者
@@ -138,6 +141,11 @@ func NewConsumer(topic, channel string, cfg *config.NSQConfig, opts *Options) (*
 	nsqConfig.DefaultRequeueDelay = opts.RequeueDelay
 	nsqConfig.MaxAttempts = opts.MaxAttempts
 
+	// 顺序消费时将 MaxInFlight 设置为 1
+	if opts.OrderedConsume {
+		nsqConfig.MaxInFlight = 1
+	}
+
 	consumer, err := nsq.NewConsumer(topic, channel, nsqConfig)
 	if err != nil {
 		logger.Error("创建 NSQ 消费者失败",
@@ -147,10 +155,8 @@ func NewConsumer(topic, channel string, cfg *config.NSQConfig, opts *Options) (*
 		return nil, err
 	}
 
-	// 设置日志级别
 	consumer.SetLoggerLevel(nsq.LogLevelError)
 
-	// 连接到 NSQ lookupd
 	addr := fmt.Sprintf("%s:%d", cfg.Lookupd.Host, cfg.Lookupd.Port)
 	if err := consumer.ConnectToNSQLookupd(addr); err != nil {
 		logger.Error("连接 NSQ lookupd 失败",
@@ -161,13 +167,15 @@ func NewConsumer(topic, channel string, cfg *config.NSQConfig, opts *Options) (*
 
 	logger.Info("成功连接 NSQ 消费者",
 		zap.String("主题", topic),
-		zap.String("通道", channel))
+		zap.String("通道", channel),
+		zap.Bool("顺序消费", opts.OrderedConsume))
 
 	return &Consumer{
 		consumer: consumer,
 		topic:    topic,
 		channel:  channel,
 		metrics:  &metrics{},
+		ordered:  opts.OrderedConsume,
 	}, nil
 }
 
@@ -208,7 +216,16 @@ func (c *Consumer) AddHandler(handler nsq.Handler) {
 		return nil
 	})
 
-	c.consumer.AddConcurrentHandlers(wrapper, DefaultOptions.MaxInFlight)
+	if c.ordered {
+		// 顺序消费时只使用单个处理器
+		c.consumer.AddHandler(wrapper)
+		logger.Info("已启用顺序消费模式",
+			zap.String("主题", c.topic),
+			zap.String("通道", c.channel))
+	} else {
+		// 非顺序消费时使用并发处理器
+		c.consumer.AddConcurrentHandlers(wrapper, DefaultOptions.MaxInFlight)
+	}
 }
 
 // Stats 返回消费者统计信息
