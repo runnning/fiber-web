@@ -18,12 +18,12 @@ import (
 // Infra 基础设施
 type Infra struct {
 	//Config *config.Config
-	DB     *database.DBManager
-	Redis  *redis.RedisManager
-	NSQ    *queue.Producer
-	Logger *logger.Logger
-	Cron   *cron.Scheduler
-	mu     sync.RWMutex
+	DB              *database.DBManager
+	Redis           *redis.RedisManager
+	DefaultProducer *queue.Producer
+	Logger          *logger.Logger
+	Cron            *cron.Scheduler
+	mu              sync.RWMutex
 }
 
 func NewInfra() *Infra {
@@ -59,11 +59,11 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("Redis initialized")
 
 	// 初始化 NSQ
-	producer, err := queue.NewProducer(&config.Data.NSQ, &queue.DefaultOptions)
+	defaultProducer, err := queue.NewProducer(&config.Data.NSQ, &queue.DefaultOptions)
 	if err != nil {
 		return err
 	}
-	i.NSQ = producer
+	i.DefaultProducer = defaultProducer
 	i.Logger.Info("NSQ initialized")
 
 	// 初始化权限
@@ -114,8 +114,8 @@ func (i *Infra) Shutdown() error {
 	i.Logger.Info("jwt stopped")
 
 	// 关闭 NSQ
-	if i.NSQ != nil {
-		i.NSQ.Stop()
+	if i.DefaultProducer != nil {
+		i.DefaultProducer.Stop()
 		i.Logger.Info("NSQ producer stopped")
 	}
 
