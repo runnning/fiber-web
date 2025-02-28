@@ -59,7 +59,7 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.Logger.Info("Redis initialized")
 
 	// 初始化 NSQ
-	producer, err := queue.NewProducer(&config.Data.NSQ)
+	producer, err := queue.NewProducer(&config.Data.NSQ, &queue.DefaultOptions)
 	if err != nil {
 		return err
 	}
@@ -115,12 +115,8 @@ func (i *Infra) Shutdown() error {
 
 	// 关闭 NSQ
 	if i.NSQ != nil {
-		if err := i.NSQ.Stop(); err != nil {
-			i.Logger.Error("Failed to stop NSQ", zap.Error(err))
-			errs = append(errs, err)
-		} else {
-			i.Logger.Info("NSQ producer stopped")
-		}
+		i.NSQ.Stop()
+		i.Logger.Info("NSQ producer stopped")
 	}
 
 	// 关闭 Redis
