@@ -82,7 +82,7 @@ type StreamQueue struct {
 	stream  string
 	options *StreamOptions
 	wg      sync.WaitGroup
-	closed  chan struct{}
+	quit    chan struct{} // 关闭信号，close(quit) 用于通知所有 goroutine 退出
 	running bool
 	mu      sync.RWMutex
 }
@@ -96,7 +96,7 @@ func NewStreamQueue(client *Client, stream string, opts *StreamOptions) *StreamQ
 		client:  client,
 		stream:  stream,
 		options: opts,
-		closed:  make(chan struct{}),
+		quit:    make(chan struct{}),
 		running: true,
 	}
 }
@@ -310,7 +310,7 @@ func (sq *StreamQueue) startWorkers(ctx context.Context, groupName string, handl
 			defer sq.wg.Done()
 			for msg := range workChan {
 				select {
-				case <-sq.closed:
+				case <-sq.quit:
 					return
 				default:
 					sq.processMessage(ctx, groupName, msg, handler, opts)
@@ -328,7 +328,7 @@ func (sq *StreamQueue) readMessages(ctx context.Context, groupName, consumerName
 		select {
 		case <-ctx.Done():
 			return
-		case <-sq.closed:
+		case <-sq.quit:
 			return
 		default:
 			if !sq.isRunning() {
@@ -362,7 +362,7 @@ func (sq *StreamQueue) readMessages(ctx context.Context, groupName, consumerName
 					select {
 					case <-ctx.Done():
 						return
-					case <-sq.closed:
+					case <-sq.quit:
 						return
 					case workChan <- streamMsg:
 					}
@@ -409,7 +409,7 @@ func (sq *StreamQueue) Consume(ctx context.Context, groupName, consumerName stri
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-sq.closed:
+	case <-sq.quit:
 		return ErrQueueClosed
 	}
 }
@@ -422,7 +422,7 @@ func (sq *StreamQueue) Close() error {
 		return nil
 	}
 	sq.running = false
-	close(sq.closed)
+	close(sq.quit) // 广播关闭信号
 	sq.mu.Unlock()
 
 	// 使用 channel 和 select 避免 goroutine 泄漏
