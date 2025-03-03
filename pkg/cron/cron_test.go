@@ -373,14 +373,20 @@ func TestTaskError(t *testing.T) {
 func TestTaskStatusTransition(t *testing.T) {
 	s := setupTestScheduler(t)
 	taskName := "status_task"
-	taskStarted := make(chan struct{})
-	taskFinished := make(chan struct{})
+	taskStarted := make(chan struct{}, 1)
+	taskFinished := make(chan struct{}, 1)
 
 	// 添加一个长时间运行的任务
 	err := s.AddTask(taskName, "* * * * * *", func() error {
-		close(taskStarted)
+		select {
+		case taskStarted <- struct{}{}:
+		default:
+		}
 		time.Sleep(time.Second)
-		close(taskFinished)
+		select {
+		case taskFinished <- struct{}{}:
+		default:
+		}
 		return nil
 	}, time.Second*5)
 	if err != nil {
@@ -422,16 +428,28 @@ func TestTaskStatusTransition(t *testing.T) {
 	case <-taskFinished:
 		// 任务已完成
 	case <-time.After(time.Second * 2):
-		t.Fatal("任务未完成")
+		t.Fatal("任务未能在预期时间内完成")
 	}
 
-	// 检查完成后状态
-	task, err = s.GetTask(taskName)
-	if err != nil {
-		t.Fatalf("获取任务失败: %v", err)
-	}
-	if task.Status != TaskStatusReady {
-		t.Errorf("完成后任务状态不正确，期望 %v，实际 %v", TaskStatusReady, task.Status)
+	// 等待任务状态变为就绪
+	deadline := time.After(time.Second * 2)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("任务未能在预期时间内变为就绪状态")
+		default:
+			task, err = s.GetTask(taskName)
+			if err != nil {
+				t.Fatalf("获取任务失败: %v", err)
+			}
+			task.mu.Lock()
+			status := task.Status
+			task.mu.Unlock()
+			if status == TaskStatusReady {
+				return
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
 	}
 }
 
