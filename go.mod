@@ -2,7 +2,7 @@ module fiber_web
 
 go 1.22.0
 
-toolchain go1.22.10
+toolchain go1.22.12
 
 require (
 	github.com/casbin/casbin/v2 v2.103.0
