@@ -1,30 +1,53 @@
 package cron
 
 import (
+	"context"
 	"errors"
 	"fiber_web/pkg/config"
 	"fiber_web/pkg/logger"
-	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
 
+var (
+	testLogger *logger.Logger
+	logOnce    sync.Once
+)
+
+// getTestLogger 获取测试用的logger实例（单例模式）
+func getTestLogger(t *testing.T) *logger.Logger {
+	logOnce.Do(func() {
+		logConfig := &config.LogConfig{
+			Level:      "info",
+			Directory:  "./logs",
+			Filename:   "test.log",
+			MaxSize:    10,
+			MaxBackups: 5,
+			MaxAge:     30,
+			Compress:   true,
+			Console:    true,
+		}
+		var err error
+		testLogger, err = logger.NewLogger(logConfig)
+		if err != nil {
+			t.Fatalf("初始化日志失败: %v", err)
+		}
+	})
+	return testLogger
+}
+
+// setupTestScheduler 创建测试用调度器
 func setupTestScheduler(t *testing.T) *Scheduler {
-	logConfig := &config.LogConfig{
-		Level:      "info",
-		Directory:  "./logs",
-		Filename:   "test.log",
-		MaxSize:    10,
-		MaxBackups: 5,
-		MaxAge:     30,
-		Compress:   true,
-		Console:    true,
-	}
-	log, err := logger.NewLogger(logConfig)
+	return NewScheduler(getTestLogger(t))
+}
+
+// createTestTask 创建测试任务的辅助函数
+func createTestTask(t *testing.T, s *Scheduler, name, spec string) {
+	err := s.AddTask(name, spec, func(ctx context.Context) error { return nil }, time.Second*5)
 	if err != nil {
-		t.Fatalf("初始化日志失败: %v", err)
+		t.Fatalf("添加任务失败: %v", err)
 	}
-	return NewScheduler(log)
 }
 
 func TestNewScheduler(t *testing.T) {
@@ -72,13 +95,13 @@ func TestAddTask(t *testing.T) {
 			taskName:    "invalid_task",
 			spec:        "invalid",
 			timeout:     time.Second * 5,
-			expectedErr: nil, // 这里会返回一个解析错误，但具体错误信息可能不同
+			expectedErr: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := s.AddTask(tt.taskName, tt.spec, func() error { return nil }, tt.timeout)
+			err := s.AddTask(tt.taskName, tt.spec, func(ctx context.Context) error { return nil }, tt.timeout)
 			if tt.expectedErr != nil && !errors.Is(err, tt.expectedErr) {
 				t.Errorf("期望错误为 %v, 实际错误为 %v", tt.expectedErr, err)
 			} else if tt.expectedErr == nil && err != nil && tt.name != "无效的cron表达式" {
@@ -90,63 +113,51 @@ func TestAddTask(t *testing.T) {
 
 func TestRemoveTask(t *testing.T) {
 	s := setupTestScheduler(t)
-
-	// 先添加一个任务
 	taskName := "test_task"
-	err := s.AddTask(taskName, "*/1 * * * * *", func() error { return nil }, time.Second*5)
-	if err != nil {
-		t.Fatalf("添加任务失败: %v", err)
-	}
+	createTestTask(t, s, taskName, "*/1 * * * * *")
 
 	// 测试移除任务
-	err = s.RemoveTask(taskName)
-	if err != nil {
+	if err := s.RemoveTask(taskName); err != nil {
 		t.Errorf("移除任务失败: %v", err)
 	}
 
 	// 测试移除不存在的任务
-	err = s.RemoveTask("non_existent_task")
-	if !errors.Is(err, ErrTaskNotFound) {
+	if err := s.RemoveTask("non_existent_task"); !errors.Is(err, ErrTaskNotFound) {
 		t.Errorf("期望错误为 %v, 实际错误为 %v", ErrTaskNotFound, err)
 	}
 }
 
 func TestGetTask(t *testing.T) {
 	s := setupTestScheduler(t)
-
 	taskName := "test_task"
-	err := s.AddTask(taskName, "*/1 * * * * *", func() error { return nil }, time.Second*5)
-	if err != nil {
-		t.Fatalf("添加任务失败: %v", err)
-	}
+	createTestTask(t, s, taskName, "*/1 * * * * *")
 
-	// 测试获取存在的任务
-	task, err := s.GetTask(taskName)
-	if err != nil {
-		t.Errorf("获取任务失败: %v", err)
-	}
-	if task == nil {
-		t.Error("任务不应为nil")
-		return
-	}
-	if task.Name != taskName {
-		t.Errorf("任务名称不匹配，期望 %s，实际 %s", taskName, task.Name)
-	}
+	t.Run("获取存在的任务", func(t *testing.T) {
+		task, err := s.GetTask(taskName)
+		if err != nil {
+			t.Errorf("获取任务失败: %v", err)
+		}
+		if task == nil {
+			t.Fatal("任务不应为nil")
+		}
+		if task.Name != taskName {
+			t.Errorf("任务名称不匹配，期望 %s，实际 %s", taskName, task.Name)
+		}
+	})
 
-	// 测试获取不存在的任务
-	task, err = s.GetTask("non_existent_task")
-	if !errors.Is(err, ErrTaskNotFound) {
-		t.Errorf("期望错误为 %v, 实际错误为 %v", ErrTaskNotFound, err)
-	}
-	if task != nil {
-		t.Error("不存在的任务应该返回nil")
-	}
+	t.Run("获取不存在的任务", func(t *testing.T) {
+		task, err := s.GetTask("non_existent_task")
+		if !errors.Is(err, ErrTaskNotFound) {
+			t.Errorf("期望错误为 %v, 实际错误为 %v", ErrTaskNotFound, err)
+		}
+		if task != nil {
+			t.Error("不存在的任务应该返回nil")
+		}
+	})
 }
 
 func TestListTasks(t *testing.T) {
 	s := setupTestScheduler(t)
-
-	// 添加多个任务
 	tasks := []struct {
 		name string
 		spec string
@@ -157,13 +168,9 @@ func TestListTasks(t *testing.T) {
 	}
 
 	for _, tt := range tasks {
-		err := s.AddTask(tt.name, tt.spec, func() error { return nil }, time.Second*5)
-		if err != nil {
-			t.Fatalf("添加任务失败: %v", err)
-		}
+		createTestTask(t, s, tt.name, tt.spec)
 	}
 
-	// 测试列出所有任务
 	taskList := s.ListTasks()
 	if len(taskList) != len(tasks) {
 		t.Errorf("任务列表长度不匹配，期望 %d，实际 %d", len(tasks), len(taskList))
@@ -174,8 +181,7 @@ func TestTaskExecution(t *testing.T) {
 	s := setupTestScheduler(t)
 	executed := make(chan bool, 1)
 
-	// 添加一个会立即执行的任务
-	err := s.AddTask("test_task", "* * * * * *", func() error {
+	err := s.AddTask("test_task", "* * * * * *", func(ctx context.Context) error {
 		executed <- true
 		return nil
 	}, time.Second*5)
@@ -183,11 +189,9 @@ func TestTaskExecution(t *testing.T) {
 		t.Fatalf("添加任务失败: %v", err)
 	}
 
-	// 启动调度器
 	s.Start()
 	defer s.Stop()
 
-	// 等待任务执行
 	select {
 	case <-executed:
 		// 任务成功执行
@@ -199,330 +203,189 @@ func TestTaskExecution(t *testing.T) {
 func TestTaskTimeout(t *testing.T) {
 	s := setupTestScheduler(t)
 	taskName := "timeout_task"
-	taskStarted := make(chan struct{})
-	taskFinished := make(chan struct{})
 
-	// 添加一个会超时的任务
-	err := s.AddTask(taskName, "* * * * * *", func() error {
+	err := s.AddTask(taskName, "* * * * * *", func(ctx context.Context) error {
 		select {
-		case taskStarted <- struct{}{}:
-		default:
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second * 2):
+			return nil
 		}
-		time.Sleep(time.Second * 2)
-		select {
-		case taskFinished <- struct{}{}:
-		default:
-		}
-		return nil
 	}, time.Second)
+
 	if err != nil {
 		t.Fatalf("添加任务失败: %v", err)
 	}
 
-	// 启动调度器
-	s.Start()
-	defer s.Stop()
-
-	// 等待任务开始执行
-	select {
-	case <-taskStarted:
-		// 任务已开始
-	case <-time.After(time.Second * 2):
-		t.Fatal("任务未开始执行")
-	}
-
-	// 等待任务超时
-	task, err := s.GetTask(taskName)
-	if err != nil {
-		t.Fatalf("获取任务失败: %v", err)
-	}
-
-	// 等待任务状态变为就绪或停止
-	deadline := time.After(time.Second * 10)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("任务未能在预期时间内完成")
-		default:
-			task.mu.Lock()
-			status := task.Status
-			task.mu.Unlock()
-			if status == TaskStatusReady || status == TaskStatusStopped {
-				return
-			}
-			time.Sleep(time.Millisecond * 100)
-		}
+	task, _ := s.GetTask(taskName)
+	if err := s.runTask(task); !errors.Is(err, ErrTaskTimeout) {
+		t.Errorf("期望超时错误，实际得到：%v", err)
 	}
 }
 
 func TestStopTask(t *testing.T) {
 	s := setupTestScheduler(t)
-	taskName := "long_running_task"
-	taskStarted := make(chan struct{}, 1)
-	taskFinished := make(chan struct{}, 1)
+	taskName := "stop_task"
+	taskStarted := make(chan bool, 1)
+	taskStopped := make(chan bool, 1)
 
-	// 添加一个长时间运行的任务
-	err := s.AddTask(taskName, "* * * * * *", func() error {
-		select {
-		case taskStarted <- struct{}{}:
-		default:
-		}
-		defer func() {
-			select {
-			case taskFinished <- struct{}{}:
-			default:
-			}
-		}()
-		time.Sleep(time.Second * 5)
-		return nil
+	err := s.AddTask(taskName, "* * * * * *", func(ctx context.Context) error {
+		taskStarted <- true
+		<-ctx.Done()
+		taskStopped <- true
+		return ctx.Err()
 	}, time.Second*10)
+
 	if err != nil {
 		t.Fatalf("添加任务失败: %v", err)
 	}
 
-	s.Start()
-	defer s.Stop()
-
-	// 等待任务开始运行
-	select {
-	case <-taskStarted:
-		// 任务已开始
-	case <-time.After(time.Second * 2):
-		t.Fatal("任务未开始执行")
-	}
-
-	// 测试停止任务
-	err = s.StopTask(taskName)
-	if err != nil {
-		t.Errorf("停止任务失败: %v", err)
-	}
-
-	// 等待任务状态变为停止
-	deadline := time.After(time.Second * 3)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("任务未能在预期时间内停止")
-		default:
-			task, err := s.GetTask(taskName)
-			if err != nil {
-				t.Fatalf("获取任务失败: %v", err)
-			}
-			task.mu.Lock()
-			status := task.Status
-			task.mu.Unlock()
-			if status == TaskStatusStopped {
-				return
-			}
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
-}
-
-func TestTaskError(t *testing.T) {
-	s := setupTestScheduler(t)
-	taskName := "error_task"
-	taskStarted := make(chan struct{}, 1)
-
-	// 添加一个会返回错误的任务
-	err := s.AddTask(taskName, "* * * * * *", func() error {
-		select {
-		case taskStarted <- struct{}{}:
-		default:
-		}
-		return fmt.Errorf("任务执行失败")
-	}, time.Second*5)
-	if err != nil {
-		t.Fatalf("添加任务失败: %v", err)
-	}
-
-	// 启动调度器
 	s.Start()
 	defer s.Stop()
 
 	// 等待任务开始执行
 	select {
 	case <-taskStarted:
-		// 任务已开始
+		// 任务已开始执行
 	case <-time.After(time.Second * 2):
 		t.Fatal("任务未开始执行")
 	}
 
-	// 等待任务状态变为就绪
-	deadline := time.After(time.Second * 3)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("任务未能在预期时间内完成")
-		default:
-			task, err := s.GetTask(taskName)
-			if err != nil {
-				t.Fatalf("获取任务失败: %v", err)
-			}
-			task.mu.Lock()
-			status := task.Status
-			task.mu.Unlock()
-			if status == TaskStatusReady {
-				return
-			}
-			time.Sleep(time.Millisecond * 100)
-		}
+	if err := s.StopTask(taskName); err != nil {
+		t.Errorf("停止任务失败: %v", err)
+	}
+
+	select {
+	case <-taskStopped:
+		// 任务已正确停止
+	case <-time.After(time.Second * 2):
+		t.Error("任务未能正确停止")
+	}
+
+	task, _ := s.GetTask(taskName)
+	if task.Status != TaskStatusStopped {
+		t.Errorf("任务状态错误，期望 %v，实际 %v", TaskStatusStopped, task.Status)
+	}
+}
+
+func TestTaskError(t *testing.T) {
+	s := setupTestScheduler(t)
+	expectedErr := errors.New("test error")
+
+	err := s.AddTask("error_task", "* * * * * *", func(ctx context.Context) error {
+		return expectedErr
+	}, time.Second*5)
+
+	if err != nil {
+		t.Fatalf("添加任务失败: %v", err)
+	}
+
+	task, _ := s.GetTask("error_task")
+	if err := s.runTask(task); !errors.Is(err, expectedErr) {
+		t.Errorf("期望错误 %v，实际得到 %v", expectedErr, err)
 	}
 }
 
 func TestTaskStatusTransition(t *testing.T) {
 	s := setupTestScheduler(t)
 	taskName := "status_task"
-	taskStarted := make(chan struct{}, 1)
-	taskFinished := make(chan struct{}, 1)
 
-	// 添加一个长时间运行的任务
-	err := s.AddTask(taskName, "* * * * * *", func() error {
-		select {
-		case taskStarted <- struct{}{}:
-		default:
-		}
-		time.Sleep(time.Second)
-		select {
-		case taskFinished <- struct{}{}:
-		default:
-		}
+	err := s.AddTask(taskName, "* * * * * *", func(ctx context.Context) error {
+		time.Sleep(time.Millisecond * 100)
 		return nil
 	}, time.Second*5)
+
 	if err != nil {
 		t.Fatalf("添加任务失败: %v", err)
 	}
 
-	// 检查初始状态
-	task, err := s.GetTask(taskName)
-	if err != nil {
-		t.Fatalf("获取任务失败: %v", err)
-	}
-	if task.Status != TaskStatusReady {
-		t.Errorf("初始任务状态不正确，期望 %v，实际 %v", TaskStatusReady, task.Status)
-	}
+	task, _ := s.GetTask(taskName)
 
-	// 启动调度器
-	s.Start()
-	defer s.Stop()
-
-	// 等待任务开始运行
-	select {
-	case <-taskStarted:
-		// 任务已开始
-	case <-time.After(time.Second * 2):
-		t.Fatal("任务未开始执行")
-	}
-
-	// 检查运行状态
-	task, err = s.GetTask(taskName)
-	if err != nil {
-		t.Fatalf("获取任务失败: %v", err)
-	}
-	if task.Status != TaskStatusRunning {
-		t.Errorf("运行中任务状态不正确，期望 %v，实际 %v", TaskStatusRunning, task.Status)
-	}
-
-	// 等待任务完成
-	select {
-	case <-taskFinished:
-		// 任务已完成
-	case <-time.After(time.Second * 2):
-		t.Fatal("任务未能在预期时间内完成")
-	}
-
-	// 等待任务状态变为就绪
-	deadline := time.After(time.Second * 2)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("任务未能在预期时间内变为就绪状态")
-		default:
-			task, err = s.GetTask(taskName)
-			if err != nil {
-				t.Fatalf("获取任务失败: %v", err)
-			}
-			task.mu.Lock()
-			status := task.Status
-			task.mu.Unlock()
-			if status == TaskStatusReady {
-				return
-			}
-			time.Sleep(time.Millisecond * 100)
+	t.Run("初始状态", func(t *testing.T) {
+		if task.Status != TaskStatusReady {
+			t.Errorf("初始状态错误，期望 %v，实际 %v", TaskStatusReady, task.Status)
 		}
-	}
+	})
+
+	t.Run("运行状态", func(t *testing.T) {
+		go func() { _ = s.runTask(task) }()
+		time.Sleep(time.Millisecond * 50)
+
+		task.mu.RLock()
+		status := task.Status
+		task.mu.RUnlock()
+
+		if status != TaskStatusRunning {
+			t.Errorf("运行状态错误，期望 %v，实际 %v", TaskStatusRunning, status)
+		}
+	})
+
+	t.Run("完成状态", func(t *testing.T) {
+		time.Sleep(time.Millisecond * 100)
+		task.mu.RLock()
+		status := task.Status
+		task.mu.RUnlock()
+
+		if status != TaskStatusReady {
+			t.Errorf("完成状态错误，期望 %v，实际 %v", TaskStatusReady, status)
+		}
+	})
 }
 
 func TestSchedulerStartStop(t *testing.T) {
 	s := setupTestScheduler(t)
-	executed := make(chan bool, 1)
+	taskExecuted := make(chan bool, 1)
 
-	// 添加任务
-	err := s.AddTask("test_task", "* * * * * *", func() error {
-		executed <- true
+	err := s.AddTask("test_task", "* * * * * *", func(ctx context.Context) error {
+		taskExecuted <- true
 		return nil
 	}, time.Second*5)
+
 	if err != nil {
 		t.Fatalf("添加任务失败: %v", err)
 	}
 
-	// 启动调度器
-	s.Start()
+	t.Run("启动后执行", func(t *testing.T) {
+		s.Start()
+		select {
+		case <-taskExecuted:
+			// 任务成功执行
+		case <-time.After(time.Second * 2):
+			t.Error("启动后任务未执行")
+		}
+	})
 
-	// 等待任务执行
-	select {
-	case <-executed:
-		// 任务成功执行
-	case <-time.After(time.Second * 2):
-		t.Fatal("任务执行超时")
-	}
-
-	// 停止调度器
-	s.Stop()
-
-	// 清空通道
-	select {
-	case <-executed:
-	default:
-	}
-
-	// 等待一段时间，确认任务不再执行
-	select {
-	case <-executed:
-		t.Error("调度器停止后任务仍在执行")
-	case <-time.After(time.Second * 2):
-		// 符合预期，任务没有执行
-	}
+	t.Run("停止后不执行", func(t *testing.T) {
+		s.Stop()
+		select {
+		case <-taskExecuted:
+			t.Error("停止后任务仍在执行")
+		case <-time.After(time.Second * 2):
+			// 正确行为：任务未执行
+		}
+	})
 }
 
 func TestTaskLastTime(t *testing.T) {
 	s := setupTestScheduler(t)
 	taskName := "last_time_task"
 
-	// 添加任务
-	err := s.AddTask(taskName, "* * * * * *", func() error {
+	err := s.AddTask(taskName, "* * * * * *", func(ctx context.Context) error {
 		return nil
 	}, time.Second*5)
+
 	if err != nil {
 		t.Fatalf("添加任务失败: %v", err)
 	}
 
-	// 启动调度器
-	s.Start()
-	defer s.Stop()
+	task, _ := s.GetTask(taskName)
+	initialTime := task.LastTime
 
-	// 等待任务执行
-	time.Sleep(time.Second * 2)
-
-	// 检查最后执行时间
-	task, err := s.GetTask(taskName)
-	if err != nil {
-		t.Fatalf("获取任务失败: %v", err)
+	if err := s.runTask(task); err != nil {
+		t.Fatalf("运行任务失败: %v", err)
 	}
-	if task.LastTime.IsZero() {
+
+	if !task.LastTime.After(initialTime) {
 		t.Error("任务最后执行时间未更新")
-	}
-	if time.Since(task.LastTime) > time.Second*3 {
-		t.Error("任务最后执行时间异常")
 	}
 }

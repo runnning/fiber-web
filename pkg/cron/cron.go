@@ -1,6 +1,7 @@
 package cron
 
 import (
+	"context"
 	"errors"
 	"fiber_web/pkg/logger"
 	"sync"
@@ -20,7 +21,7 @@ const (
 )
 
 // TaskFunc 定时任务函数类型
-type TaskFunc func() error
+type TaskFunc func(ctx context.Context) error
 
 // Task 定时任务结构
 type Task struct {
@@ -31,10 +32,9 @@ type Task struct {
 	Status   TaskStatus    // 任务状态
 	EntryID  cron.EntryID  // cron任务ID
 	LastTime time.Time     // 上次执行时间
-	mu       sync.Mutex    // 互斥锁
-	done     chan struct{} // 用于停止任务的通道
-	cancel   chan struct{} // 用于取消任务的通道
-	stopping bool          // 标记任务是否正在停止
+	mu       sync.RWMutex  // 读写锁，优化并发访问
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // Scheduler 调度器
@@ -59,7 +59,6 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 检查任务是否已存在
 	if _, exists := s.tasks[name]; exists {
 		return ErrTaskAlreadyExists
 	}
@@ -72,17 +71,12 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 		Status:  TaskStatusReady,
 	}
 
-	// 包装任务函数，添加超时控制和错误处理
 	wrappedFunc := func() {
 		if err := s.runTask(task); err != nil && !errors.Is(err, ErrTaskStopped) {
-			s.log.Error("task execution failed",
-				zap.String("task", name),
-				zap.Error(err),
-			)
+			s.log.Error("task execution failed", zap.String("task", name), zap.Error(err))
 		}
 	}
 
-	// 添加到cron
 	entryID, err := s.cron.AddFunc(spec, wrappedFunc)
 	if err != nil {
 		return err
@@ -90,12 +84,7 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 
 	task.EntryID = entryID
 	s.tasks[name] = task
-
-	s.log.Info("task added successfully",
-		zap.String("task", name),
-		zap.String("spec", spec),
-	)
-
+	s.log.Info("task added successfully", zap.String("task", name), zap.String("spec", spec))
 	return nil
 }
 
@@ -106,70 +95,44 @@ func (s *Scheduler) runTask(task *Task) error {
 		task.mu.Unlock()
 		return ErrTaskIsRunning
 	}
+
+	// 创建新的上下文和取消函数
+	ctx, cancel := context.WithTimeout(context.Background(), task.Timeout)
+	task.ctx = ctx
+	task.cancel = cancel
 	task.Status = TaskStatusRunning
-	task.done = make(chan struct{})
-	task.cancel = make(chan struct{})
 	task.mu.Unlock()
 
-	// 创建一个错误通道
-	errCh := make(chan error, 1)
-
-	// 启动任务执行
-	go func() {
-		select {
-		case <-task.cancel: // 任务被取消
-			errCh <- ErrTaskStopped
-			return
-		default:
-			errCh <- task.Func()
-		}
-	}()
-
-	var err error
-	// 等待任务完成、超时或被停止
-	select {
-	case err = <-errCh:
+	// 确保资源清理
+	defer func() {
 		task.mu.Lock()
-		if task.Status == TaskStatusRunning { // 只有在还在运行时才设置为就绪
+		if task.Status == TaskStatusRunning {
 			task.Status = TaskStatusReady
 		}
+		task.LastTime = time.Now()
+		if task.cancel != nil {
+			task.cancel()
+		}
+		task.ctx = nil
+		task.cancel = nil
 		task.mu.Unlock()
-	case <-time.After(task.Timeout):
-		close(task.cancel) // 通知任务 goroutine 退出
-		err = ErrTaskTimeout
-	case <-task.done:
-		close(task.cancel) // 通知任务 goroutine 退出
-		err = ErrTaskStopped
-	}
+	}()
 
-	// 清理资源
-	task.mu.Lock()
-	defer task.mu.Unlock()
-
-	if task.Status == TaskStatusRunning {
-		task.Status = TaskStatusStopped
-	}
-	task.LastTime = time.Now()
-
-	// 只有在通道未关闭时才关闭它们
-	select {
-	case <-task.done:
-		// done 通道已经关闭
-	default:
-		close(task.done)
-	}
+	// 执行任务
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- task.Func(ctx)
+	}()
 
 	select {
-	case <-task.cancel:
-		// cancel 通道已经关闭
-	default:
-		close(task.cancel)
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return ErrTaskTimeout
+		}
+		return ErrTaskStopped
 	}
-
-	task.done = nil
-	task.cancel = nil
-
-	return err
 }
 
 // RemoveTask 移除定时任务
@@ -184,11 +147,7 @@ func (s *Scheduler) RemoveTask(name string) error {
 
 	s.cron.Remove(task.EntryID)
 	delete(s.tasks, name)
-
-	s.log.Info("task removed",
-		zap.String("task", name),
-	)
-
+	s.log.Info("task removed", zap.String("task", name))
 	return nil
 }
 
@@ -200,6 +159,18 @@ func (s *Scheduler) Start() {
 
 // Stop 停止调度器
 func (s *Scheduler) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 停止所有运行中的任务
+	for _, task := range s.tasks {
+		task.mu.Lock()
+		if task.Status == TaskStatusRunning && task.cancel != nil {
+			task.cancel()
+		}
+		task.mu.Unlock()
+	}
+
 	s.cron.Stop()
 	s.log.Info("scheduler stopped")
 }
@@ -242,15 +213,13 @@ func (s *Scheduler) StopTask(name string) error {
 	defer task.mu.Unlock()
 
 	if task.Status != TaskStatusRunning {
-		return ErrTaskNotRunning
-	}
-
-	if task.done != nil {
-		close(task.done)
-		task.Status = TaskStatusStopped
-		task.LastTime = time.Now()
 		return nil
 	}
 
-	return ErrTaskCannotBeStopped
+	if task.cancel != nil {
+		task.cancel()
+	}
+	task.Status = TaskStatusStopped
+
+	return nil
 }
