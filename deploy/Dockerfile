@@ -1,5 +1,5 @@
 # 阶段 1: 构建
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # 安装构建工具
 RUN apk add --no-cache gcc musl-dev
