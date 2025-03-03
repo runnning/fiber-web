@@ -209,7 +209,7 @@ func TestTaskTimeout(t *testing.T) {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(time.Second * 2):
-			return nil
+			return ErrTaskTimeout
 		}
 	}, time.Second)
 
