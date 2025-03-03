@@ -33,6 +33,8 @@ type Task struct {
 	LastTime time.Time     // 上次执行时间
 	mu       sync.Mutex    // 互斥锁
 	done     chan struct{} // 用于停止任务的通道
+	cancel   chan struct{} // 用于取消任务的通道
+	stopping bool          // 标记任务是否正在停止
 }
 
 // Scheduler 调度器
@@ -106,36 +108,68 @@ func (s *Scheduler) runTask(task *Task) error {
 	}
 	task.Status = TaskStatusRunning
 	task.done = make(chan struct{})
+	task.cancel = make(chan struct{})
 	task.mu.Unlock()
 
-	// 确保任务结束时重置状态
-	defer func() {
-		task.mu.Lock()
-		task.Status = TaskStatusStopped
-		task.LastTime = time.Now()
-		close(task.done)
-		task.done = nil
-		task.mu.Unlock()
-	}()
+	// 创建一个错误通道
+	errCh := make(chan error, 1)
 
-	// 创建一个带超时的context
-	done := make(chan error, 1)
+	// 启动任务执行
 	go func() {
-		done <- task.Func()
+		select {
+		case <-task.cancel: // 任务被取消
+			errCh <- ErrTaskStopped
+			return
+		default:
+			errCh <- task.Func()
+		}
 	}()
 
+	var err error
 	// 等待任务完成、超时或被停止
 	select {
-	case err := <-done:
+	case err = <-errCh:
 		task.mu.Lock()
-		task.Status = TaskStatusReady
+		if task.Status == TaskStatusRunning { // 只有在还在运行时才设置为就绪
+			task.Status = TaskStatusReady
+		}
 		task.mu.Unlock()
-		return err
 	case <-time.After(task.Timeout):
-		return ErrTaskTimeout
+		close(task.cancel) // 通知任务 goroutine 退出
+		err = ErrTaskTimeout
 	case <-task.done:
-		return errors.New("task stopped")
+		close(task.cancel) // 通知任务 goroutine 退出
+		err = ErrTaskStopped
 	}
+
+	// 清理资源
+	task.mu.Lock()
+	defer task.mu.Unlock()
+
+	if task.Status == TaskStatusRunning {
+		task.Status = TaskStatusStopped
+	}
+	task.LastTime = time.Now()
+
+	// 只有在通道未关闭时才关闭它们
+	select {
+	case <-task.done:
+		// done 通道已经关闭
+	default:
+		close(task.done)
+	}
+
+	select {
+	case <-task.cancel:
+		// cancel 通道已经关闭
+	default:
+		close(task.cancel)
+	}
+
+	task.done = nil
+	task.cancel = nil
+
+	return err
 }
 
 // RemoveTask 移除定时任务
@@ -215,7 +249,6 @@ func (s *Scheduler) StopTask(name string) error {
 		close(task.done)
 		task.Status = TaskStatusStopped
 		task.LastTime = time.Now()
-		task.done = nil
 		return nil
 	}
 
