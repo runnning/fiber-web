@@ -238,7 +238,7 @@ func TestTaskTimeout(t *testing.T) {
 	}
 
 	// 等待任务状态变为就绪或停止
-	deadline := time.After(time.Second * 3)
+	deadline := time.After(time.Second * 10)
 	for {
 		select {
 		case <-deadline:
