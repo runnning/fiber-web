@@ -322,11 +322,14 @@ func TestStopTask(t *testing.T) {
 func TestTaskError(t *testing.T) {
 	s := setupTestScheduler(t)
 	taskName := "error_task"
-	taskStarted := make(chan struct{})
+	taskStarted := make(chan struct{}, 1)
 
 	// 添加一个会返回错误的任务
 	err := s.AddTask(taskName, "* * * * * *", func() error {
-		close(taskStarted)
+		select {
+		case taskStarted <- struct{}{}:
+		default:
+		}
 		return fmt.Errorf("任务执行失败")
 	}, time.Second*5)
 	if err != nil {
@@ -345,16 +348,25 @@ func TestTaskError(t *testing.T) {
 		t.Fatal("任务未开始执行")
 	}
 
-	// 等待任务完成
-	time.Sleep(time.Second)
-
-	// 检查任务状态
-	task, err := s.GetTask(taskName)
-	if err != nil {
-		t.Fatalf("获取任务失败: %v", err)
-	}
-	if task.Status != TaskStatusReady {
-		t.Errorf("任务状态不正确，期望 %v，实际 %v", TaskStatusReady, task.Status)
+	// 等待任务状态变为就绪
+	deadline := time.After(time.Second * 3)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("任务未能在预期时间内完成")
+		default:
+			task, err := s.GetTask(taskName)
+			if err != nil {
+				t.Fatalf("获取任务失败: %v", err)
+			}
+			task.mu.Lock()
+			status := task.Status
+			task.mu.Unlock()
+			if status == TaskStatusReady {
+				return
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
 	}
 }
 
