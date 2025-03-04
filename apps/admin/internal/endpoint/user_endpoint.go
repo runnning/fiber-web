@@ -159,11 +159,11 @@ func (h *UserHandler) TestUser(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
-	opts := []query.Option{
+	opts := []query.QueryBuilder{
 		ctx.GetPagination(c),
-		query.Condition{Field: "status", Operator: "=", Value: 1},
-		query.Order{Field: "created_at", Desc: true},
-		query.Select{Fields: []string{"id", "name", "email"}},
+		&query.Condition{Field: "status", Operator: query.OpEQ, Value: 1},
+		&query.Order{Field: "created_at", Desc: true},
+		&query.Select{Fields: []string{"id", "name", "email"}},
 	}
 
 	result, err := h.userUseCase.List(c.Context(), opts...)

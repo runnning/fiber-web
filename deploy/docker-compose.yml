@@ -17,11 +17,13 @@ services:
       - REDIS_PORT=6379
       - NSQ_LOOKUPD_HOST=nsqlookupd
       - NSQ_LOOKUPD_PORT=4161
+      - MONGODB_URI=mongodb://fiber_web:fiber_web_password@mongodb:27017/fiber_web
     depends_on:
       - mysql
       - redis
       - nsqlookupd
       - nsqd
+      - mongodb
     networks:
       - fiber_web_network
     restart: unless-stopped
@@ -90,6 +92,22 @@ services:
       - fiber_web_network
     restart: unless-stopped
 
+  mongodb:
+    image: mongo:latest
+    container_name: fiber_web_mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=root
+      - MONGO_INITDB_DATABASE=fiber_web
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb/init.js:/docker-entrypoint-initdb.d/init.js
+    networks:
+      - fiber_web_network
+    restart: unless-stopped
+
 networks:
   fiber_web_network:
     driver: bridge
@@ -97,3 +115,4 @@ networks:
 volumes:
   mysql_data:
   redis_data:
+  mongodb_data:

@@ -15,6 +15,7 @@ var Data = new(Config)
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
+	MongoDB  MongoDBConfig  `mapstructure:"mongodb"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	NSQ      NSQConfig      `mapstructure:"nsq"`
 	App      AppConfig      `mapstructure:"app"`
@@ -94,6 +95,20 @@ type LogConfig struct {
 	Console    bool   `mapstructure:"console"`     // 是否输出到控制台
 }
 
+type MongoDBConfig struct {
+	MultiDB   bool                   `mapstructure:"multi_db"`  // 是否启用多库模式
+	Databases map[string]MongoConfig `mapstructure:"databases"` // 多库配置
+	Default   MongoConfig            `mapstructure:"default"`   // 单库配置
+}
+
+type MongoConfig struct {
+	URI             string        `mapstructure:"uri"`                // MongoDB连接URI
+	Database        string        `mapstructure:"database"`           // 数据库名称
+	MaxPoolSize     uint64        `mapstructure:"max_pool_size"`      // 连接池最大连接数
+	MinPoolSize     uint64        `mapstructure:"min_pool_size"`      // 连接池最小连接数
+	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"` // 连接最大空闲时间
+}
+
 func Load() error {
 	configName := os.Getenv("CONFIG_NAME")
 	if configName == "" {
@@ -156,6 +171,14 @@ func Load() error {
 	viper.SetDefault("log.max_age", 30)
 	viper.SetDefault("log.compress", true)
 	viper.SetDefault("log.console", true)
+
+	// 设置MongoDB默认值
+	viper.SetDefault("mongodb.multi_db", false)
+	viper.SetDefault("mongodb.default.uri", "mongodb://localhost:27017")
+	viper.SetDefault("mongodb.default.database", "fiber_web")
+	viper.SetDefault("mongodb.default.max_pool_size", 100)
+	viper.SetDefault("mongodb.default.min_pool_size", 10)
+	viper.SetDefault("mongodb.default.max_conn_idle_time", time.Minute*10)
 
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError

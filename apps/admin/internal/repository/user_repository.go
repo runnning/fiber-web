@@ -15,7 +15,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*entity.User, error)
 	Update(ctx context.Context, user *entity.User) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, opts ...query.Option) (*query.Result[[]entity.User], error)
+	List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.User], error)
 }
 
 type userRepository struct {
@@ -57,12 +57,12 @@ func (r *userRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&entity.User{}, id).Error
 }
 
-func (r *userRepository) List(ctx context.Context, opts ...query.Option) (*query.Result[[]entity.User], error) {
+func (r *userRepository) List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.User], error) {
 	var users []entity.User
 	var total int64
 
 	db := r.db.WithContext(ctx).Model(&entity.User{})
-	db = query.WithOptions(db, opts...)
+	db = query.BuildQuery(opts...).Apply(db)
 
 	if err := db.Count(&total).Error; err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (r *userRepository) List(ctx context.Context, opts ...query.Option) (*query
 
 	var page, pageSize int
 	for _, opt := range opts {
-		if po, ok := opt.(query.PageOption); ok {
+		if po, ok := opt.(*query.PageOption); ok {
 			page = po.Page
 			pageSize = po.PageSize
 			break

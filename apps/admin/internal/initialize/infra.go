@@ -20,6 +20,7 @@ type Infra struct {
 	//Config *config.Config
 	DB              *database.DBManager
 	Redis           *redis.RedisManager
+	MongoDB         *database.MongoManager
 	DefaultProducer *queue.Producer
 	Logger          *logger.Logger
 	Cron            *cron.Scheduler
@@ -49,6 +50,14 @@ func (i *Infra) Init(ctx context.Context) error {
 	}
 	i.DB = dbManager
 	i.Logger.Info("Database initialized")
+
+	// 初始化MongoDB
+	mongoManager, err := database.NewMongoManager(&config.Data.MongoDB)
+	if err != nil {
+		return err
+	}
+	i.MongoDB = mongoManager
+	i.Logger.Info("MongoDB initialized")
 
 	// 初始化 Redis
 	redisManager, err := redis.NewRedisManager(&config.Data.Redis)
@@ -126,6 +135,16 @@ func (i *Infra) Shutdown() error {
 			errs = append(errs, err)
 		} else {
 			i.Logger.Info("Redis connection closed")
+		}
+	}
+
+	// 关闭MongoDB
+	if i.MongoDB != nil {
+		if err := i.MongoDB.Close(); err != nil {
+			i.Logger.Error("Failed to close MongoDB", zap.Error(err))
+			errs = append(errs, err)
+		} else {
+			i.Logger.Info("MongoDB connection closed")
 		}
 	}
 

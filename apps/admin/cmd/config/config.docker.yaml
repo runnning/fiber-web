@@ -88,3 +88,25 @@ log:
   max_age: 30           # 30天
   compress: true
   console: false        # 生产环境不输出到控制台
+
+mongodb:
+  multi_db: false    # 默认使用单库模式
+  default:           # 单库配置
+    uri: "mongodb://mongodb:27017"
+    database: "fiber_web"
+    max_pool_size: 100
+    min_pool_size: 10
+    max_conn_idle_time: "10m"
+  databases:         # 多库配置(仅在 multi_db: true 时生效)
+    default:
+      uri: "mongodb://mongodb:27017"
+      database: "fiber_web"
+      max_pool_size: 100
+      min_pool_size: 10
+      max_conn_idle_time: "10m"
+    read:
+      uri: "mongodb://mongodb-read:27017"
+      database: "fiber_web_read"
+      max_pool_size: 50
+      min_pool_size: 5
+      max_conn_idle_time: "5m"

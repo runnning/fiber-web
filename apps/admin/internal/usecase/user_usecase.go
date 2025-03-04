@@ -13,7 +13,7 @@ type UserUseCase interface {
 	GetUser(ctx context.Context, id uint) (*entity.User, error)
 	UpdateUser(ctx context.Context, user *entity.User) error
 	DeleteUser(ctx context.Context, id uint) error
-	List(ctx context.Context, opts ...query.Option) (*query.Result[[]entity.User], error)
+	List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.User], error)
 }
 
 // userUseCase 用户用例实现
@@ -42,6 +42,6 @@ func (uc *userUseCase) DeleteUser(ctx context.Context, id uint) error {
 	return uc.userRepo.Delete(ctx, id)
 }
 
-func (uc *userUseCase) List(ctx context.Context, opts ...query.Option) (*query.Result[[]entity.User], error) {
+func (uc *userUseCase) List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.User], error) {
 	return uc.userRepo.List(ctx, opts...)
 }

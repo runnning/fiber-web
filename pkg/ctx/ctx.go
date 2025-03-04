@@ -6,10 +6,10 @@ import (
 )
 
 // GetPagination 从上下文获取分页参数
-func GetPagination(c *fiber.Ctx) query.PageOption {
-	p, ok := c.Locals("pagination").(query.PageOption)
+func GetPagination(c *fiber.Ctx) *query.PageOption {
+	p, ok := c.Locals("pagination").(*query.PageOption)
 	if !ok {
-		return query.NewPageOption(1, 10, false)
+		return query.NewPageOption(1, 10, true)
 	}
 	return p
 }
