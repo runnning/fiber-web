@@ -8,6 +8,7 @@ import (
 	"{{.ModuleName}}/pkg/query"
 	"{{.ModuleName}}/pkg/response"
 	"{{.ModuleName}}/pkg/validator"
+	"{{.ModuleName}}/pkg/ctx"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -95,8 +96,10 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
 	opts := []query.Option{
-		middleware.GetPagination(c),
-		query.Order{Field: "created_at", Desc: true},
+		ctx.GetPagination(c),
+		&query.Condition{Field: "status", Operator: query.OpEQ, Value: 1},
+		&query.Order{Field: "created_at", Desc: true},
+		&query.Select{Fields: []string{"id", "name", "email"}},
 	}
 
 	result, err := h.{{.VarName}}UseCase.List(c.Context(), opts...)

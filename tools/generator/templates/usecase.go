@@ -15,7 +15,7 @@ type {{.Name}}UseCase interface {
 	Get{{.Name}}(ctx context.Context, id uint) (*entity.{{.Name}}, error)
 	Update{{.Name}}(ctx context.Context, {{.VarName}} *entity.{{.Name}}) error
 	Delete{{.Name}}(ctx context.Context, id uint) error
-	List(ctx context.Context, opts ...query.Option) (*query.Result[[]entity.{{.Name}}], error)
+	List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.{{.Name}}], error)
 }
 
 // {{.VarName}}UseCase 用例实现
@@ -46,7 +46,7 @@ func (uc *{{.VarName}}UseCase) Delete{{.Name}}(ctx context.Context, id uint) err
 	return uc.{{.VarName}}Repo.Delete(ctx, id)
 }
 
-func (uc *{{.VarName}}UseCase) List(ctx context.Context, opts ...query.Option) (*query.Result[[]entity.{{.Name}}], error) {
+func (uc *{{.VarName}}UseCase) List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.{{.Name}}], error) {
 	return uc.{{.VarName}}Repo.List(ctx, opts...)
 }
 `
