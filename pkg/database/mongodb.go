@@ -58,7 +58,12 @@ func newMongoDB(cfg *config.MongoConfig) (*MongoDB, error) {
 		ApplyURI(cfg.URI).
 		SetMaxPoolSize(cfg.MaxPoolSize).
 		SetMinPoolSize(cfg.MinPoolSize).
-		SetMaxConnIdleTime(cfg.MaxConnIdleTime)
+		SetMaxConnIdleTime(cfg.MaxConnIdleTime).
+		SetAuth(options.Credential{
+			Username:   cfg.Username,
+			Password:   cfg.Password,
+			AuthSource: cfg.AuthSource,
+		})
 
 	// 连接到MongoDB
 	client, err := mongo.Connect(ctx, clientOptions)

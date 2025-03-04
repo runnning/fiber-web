@@ -94,6 +94,9 @@ mongodb:
   default:           # 单库配置
     uri: "mongodb://mongodb:27017"
     database: "fiber_web"
+    username: "root"
+    password: "root"
+    auth_source: "admin"
     max_pool_size: 100
     min_pool_size: 10
     max_conn_idle_time: "10m"
@@ -101,12 +104,18 @@ mongodb:
     default:
       uri: "mongodb://mongodb:27017"
       database: "fiber_web"
+      username: "root"
+      password: "root"
+      auth_source: "admin"
       max_pool_size: 100
       min_pool_size: 10
       max_conn_idle_time: "10m"
     read:
       uri: "mongodb://mongodb-read:27017"
       database: "fiber_web_read"
+      username: "root"
+      password: "root"
+      auth_source: "admin"
       max_pool_size: 50
       min_pool_size: 5
       max_conn_idle_time: "5m"

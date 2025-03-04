@@ -104,6 +104,9 @@ type MongoDBConfig struct {
 type MongoConfig struct {
 	URI             string        `mapstructure:"uri"`                // MongoDB连接URI
 	Database        string        `mapstructure:"database"`           // 数据库名称
+	Username        string        `mapstructure:"username"`           // 用户名
+	Password        string        `mapstructure:"password"`           // 密码
+	AuthSource      string        `mapstructure:"auth_source"`        // 认证数据库
 	MaxPoolSize     uint64        `mapstructure:"max_pool_size"`      // 连接池最大连接数
 	MinPoolSize     uint64        `mapstructure:"min_pool_size"`      // 连接池最小连接数
 	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"` // 连接最大空闲时间
