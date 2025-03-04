@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fiber_web/pkg/config"
+	"fiber_web/pkg/database"
 	"fiber_web/pkg/utils/concurrent"
 
 	"github.com/natefinch/lumberjack"
@@ -396,4 +397,17 @@ func With(fields ...zap.Field) *Logger {
 		return defaultLogger.With(fields...)
 	}
 	return &Logger{}
+}
+
+// WithMongoDB 添加 MongoDB 日志支持
+func WithMongoDB(mongoDB *database.MongoDB, collection string) Option {
+	if collection == "" {
+		collection = "logs"
+	}
+	return func(l *Logger) {
+		mongoCore := NewMongoCore(mongoDB, collection)
+		l.log = l.log.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return zapcore.NewTee(core, mongoCore)
+		}))
+	}
 }

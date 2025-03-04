@@ -36,12 +36,23 @@ func (i *Infra) Init(ctx context.Context) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	// 初始化MongoDB
+	mongoManager, err := database.NewMongoManager(&config.Data.MongoDB)
+	if err != nil {
+		return err
+	}
+	i.MongoDB = mongoManager
+
+	defaultMongoDb, err := i.MongoDB.GetMongoDB("default")
+	if err != nil {
+		return err
+	}
+
 	// 初始化日志
-	if err := logger.InitLogger(&config.Data.Log, logger.WithAsync(3, 1024)); err != nil {
+	if err := logger.InitLogger(&config.Data.Log, logger.WithAsync(3, 1024), logger.WithMongoDB(defaultMongoDb, "")); err != nil {
 		return err
 	}
 	i.Logger = logger.GetLogger()
-	i.Logger.Info("Logger initialized")
 
 	// 初始化数据库
 	dbManager, err := database.NewDBManager(&config.Data.Database)
@@ -50,14 +61,6 @@ func (i *Infra) Init(ctx context.Context) error {
 	}
 	i.DB = dbManager
 	i.Logger.Info("Database initialized")
-
-	// 初始化MongoDB
-	mongoManager, err := database.NewMongoManager(&config.Data.MongoDB)
-	if err != nil {
-		return err
-	}
-	i.MongoDB = mongoManager
-	i.Logger.Info("MongoDB initialized")
 
 	// 初始化 Redis
 	redisManager, err := redis.NewRedisManager(&config.Data.Redis)
@@ -138,16 +141,6 @@ func (i *Infra) Shutdown() error {
 		}
 	}
 
-	// 关闭MongoDB
-	if i.MongoDB != nil {
-		if err := i.MongoDB.Close(); err != nil {
-			i.Logger.Error("Failed to close MongoDB", zap.Error(err))
-			errs = append(errs, err)
-		} else {
-			i.Logger.Info("MongoDB connection closed")
-		}
-	}
-
 	// 关闭数据库
 	if i.DB != nil {
 		if err := i.DB.Close(); err != nil {
@@ -161,6 +154,13 @@ func (i *Infra) Shutdown() error {
 	// 同步日志
 	if i.Logger != nil {
 		if err := i.Logger.Sync(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	// 关闭MongoDB
+	if i.MongoDB != nil {
+		if err := i.MongoDB.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
