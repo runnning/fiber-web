@@ -15,7 +15,7 @@ type {{.Name}}Repository interface {
 	FindByID(ctx context.Context, id uint) (*entity.{{.Name}}, error)
 	Update(ctx context.Context, {{.VarName}} *entity.{{.Name}}) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.{{.Name}}], error)
+	List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error)
 }
 
 type {{.VarName}}Repository struct {
@@ -48,30 +48,18 @@ func (r *{{.VarName}}Repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&entity.{{.Name}}{}, id).Error
 }
 
-func (r *{{.VarName}}Repository) List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.{{.Name}}], error) {
+func (r *{{.VarName}}Repository) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error) {
 	var {{.VarName}}s []entity.{{.Name}}
-	var total int64
+	builder := query.NewMySQLQueryBuilder(r.db.WithContext(ctx).Model(&entity.{{.Name}}{}))
 
-	db := r.db.WithContext(ctx).Model(&entity.{{.Name}}{})
-	db = query.BuildQuery(opts...).Apply(db)
-
-	if err := db.Count(&total).Error; err != nil {
-		return nil, err
+	// 添加查询条件
+	if search := req.GetFilter("search"); search != "" {
+		builder.Like("name", search)
+	}
+	if startTime := req.GetFilter("start_time"); startTime != "" {
+		builder.Between("created_at", startTime, req.GetFilter("end_time"))
 	}
 
-	if err := db.Find(&{{.VarName}}s).Error; err != nil {
-		return nil, err
-	}
-
-	var page, pageSize int
-	for _, opt := range opts {
-		if po, ok := opt.(*query.PageOption); ok {
-			page = po.Page
-			pageSize = po.PageSize
-			break
-		}
-	}
-
-	return query.NewResult({{.VarName}}s, total, page, pageSize), nil
+	return query.MySQLPaginate[entity.{{.Name}}](builder, req, &{{.VarName}}s)
 }
 `

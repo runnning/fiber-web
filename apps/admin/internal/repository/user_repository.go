@@ -15,7 +15,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*entity.User, error)
 	Update(ctx context.Context, user *entity.User) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.User], error)
+	List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.User], error)
 }
 
 type userRepository struct {
@@ -57,29 +57,17 @@ func (r *userRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&entity.User{}, id).Error
 }
 
-func (r *userRepository) List(ctx context.Context, opts ...query.QueryBuilder) (*query.Result[[]entity.User], error) {
+func (r *userRepository) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.User], error) {
 	var users []entity.User
-	var total int64
+	builder := query.NewMySQLQueryBuilder(r.db.WithContext(ctx).Model(&entity.User{}))
 
-	db := r.db.WithContext(ctx).Model(&entity.User{})
-	db = query.BuildQuery(opts...).Apply(db)
-
-	if err := db.Count(&total).Error; err != nil {
-		return nil, err
+	// 添加查询条件
+	if search := req.GetFilter("search"); search != "" {
+		builder.Like("name", search).Like("email", search)
 	}
+	builder.Equal("status", req.GetFilter("status"))
+	builder.Equal("role", req.GetFilter("role"))
+	builder.Between("created_at", req.GetFilter("start_time"), req.GetFilter("end_time"))
 
-	if err := db.Find(&users).Error; err != nil {
-		return nil, err
-	}
-
-	var page, pageSize int
-	for _, opt := range opts {
-		if po, ok := opt.(*query.PageOption); ok {
-			page = po.Page
-			pageSize = po.PageSize
-			break
-		}
-	}
-
-	return query.NewResult(users, total, page, pageSize), nil
+	return query.MySQLPaginate(builder, req, &users)
 }

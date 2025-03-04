@@ -95,14 +95,14 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 }
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
-	opts := []query.Option{
-		ctx.GetPagination(c),
-		&query.Condition{Field: "status", Operator: query.OpEQ, Value: 1},
-		&query.Order{Field: "created_at", Desc: true},
-		&query.Select{Fields: []string{"id", "name", "email"}},
-	}
+	req := ctx.GetPagination(c)
 
-	result, err := h.{{.VarName}}UseCase.List(c.Context(), opts...)
+	// 添加查询条件
+	req.AddFilter("search", c.Query("search"))
+	req.AddFilter("start_time", c.Query("start_time"))
+	req.AddFilter("end_time", c.Query("end_time"))
+
+	result, err := h.{{.VarName}}UseCase.List(c.Context(), req)
 	if err != nil {
 		return response.ServerError(c, err)
 	}

@@ -7,7 +7,6 @@ import (
 	"fiber_web/pkg/auth"
 	"fiber_web/pkg/ctx"
 	"fiber_web/pkg/logger"
-	"fiber_web/pkg/query"
 	"fiber_web/pkg/response"
 	"fiber_web/pkg/validator"
 
@@ -159,14 +158,15 @@ func (h *UserHandler) TestUser(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
-	opts := []query.QueryBuilder{
-		ctx.GetPagination(c),
-		&query.Condition{Field: "status", Operator: query.OpEQ, Value: 1},
-		&query.Order{Field: "created_at", Desc: true},
-		&query.Select{Fields: []string{"id", "name", "email"}},
-	}
+	req := ctx.GetPagination(c)
 
-	result, err := h.userUseCase.List(c.Context(), opts...)
+	// 添加过滤条件
+	req.AddFilter("status", "1")
+	req.AddFilter("search", c.Query("search"))
+	req.AddFilter("start_time", c.Query("start_time"))
+	req.AddFilter("end_time", c.Query("end_time"))
+
+	result, err := h.userUseCase.List(c.Context(), req)
 	if err != nil {
 		return response.ServerError(c, err)
 	}
