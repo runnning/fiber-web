@@ -31,7 +31,7 @@ var TestMongoConfig = &config.MongoDBConfig{
 	MultiDB: false,
 	Default: config.MongoConfig{
 		URI:             "mongodb://localhost:27017",
-		Database:        "test_db",
+		Database:        "fiber_web",
 		Username:        "root",
 		Password:        "root",
 		AuthSource:      "admin",

@@ -70,40 +70,62 @@ func (fb *FilterBuilder) AddArrayCondition(field string, op Operator, values []s
 func (fb *FilterBuilder) Build() bson.M {
 	filter := bson.M{}
 
+	// 创建一个临时映射来合并同一字段的多个条件
+	fieldConditions := make(map[string]bson.M)
+
 	for _, condition := range fb.conditions {
+		// 获取或创建字段的条件映射
+		fieldFilter, exists := fieldConditions[condition.Field]
+		if !exists {
+			fieldFilter = bson.M{}
+		}
+
 		switch condition.Operator {
 		case OpEq:
+			// 等于操作直接设置字段值
 			filter[condition.Field] = condition.Value
 		case OpNe:
-			filter[condition.Field] = bson.M{"$ne": condition.Value}
+			fieldFilter["$ne"] = condition.Value
 		case OpGt:
-			filter[condition.Field] = bson.M{"$gt": condition.Value}
+			fieldFilter["$gt"] = condition.Value
 		case OpGte:
-			filter[condition.Field] = bson.M{"$gte": condition.Value}
+			fieldFilter["$gte"] = condition.Value
 		case OpLt:
-			filter[condition.Field] = bson.M{"$lt": condition.Value}
+			fieldFilter["$lt"] = condition.Value
 		case OpLte:
-			filter[condition.Field] = bson.M{"$lte": condition.Value}
+			fieldFilter["$lte"] = condition.Value
 		case OpIn:
-			filter[condition.Field] = bson.M{"$in": condition.Values}
+			fieldFilter["$in"] = condition.Values
 		case OpNin:
-			filter[condition.Field] = bson.M{"$nin": condition.Values}
+			fieldFilter["$nin"] = condition.Values
 		case OpContains:
 			if strVal, ok := condition.Value.(string); ok {
-				filter[condition.Field] = bson.M{"$regex": primitive.Regex{Pattern: strVal, Options: "i"}}
+				fieldFilter["$regex"] = primitive.Regex{Pattern: strVal, Options: "i"}
 			}
 		case OpStartsWith:
 			if strVal, ok := condition.Value.(string); ok {
-				filter[condition.Field] = bson.M{"$regex": primitive.Regex{Pattern: "^" + strVal, Options: "i"}}
+				fieldFilter["$regex"] = primitive.Regex{Pattern: "^" + strVal, Options: "i"}
 			}
 		case OpEndsWith:
 			if strVal, ok := condition.Value.(string); ok {
-				filter[condition.Field] = bson.M{"$regex": primitive.Regex{Pattern: strVal + "$", Options: "i"}}
+				fieldFilter["$regex"] = primitive.Regex{Pattern: strVal + "$", Options: "i"}
 			}
 		case OpExists:
 			if boolVal, ok := condition.Value.(bool); ok {
-				filter[condition.Field] = bson.M{"$exists": boolVal}
+				fieldFilter["$exists"] = boolVal
 			}
+		}
+
+		// 如果不是等于操作，更新字段条件映射
+		if condition.Operator != OpEq {
+			fieldConditions[condition.Field] = fieldFilter
+		}
+	}
+
+	// 将所有字段条件合并到最终过滤器中
+	for field, conditions := range fieldConditions {
+		if len(conditions) > 0 && filter[field] == nil {
+			filter[field] = conditions
 		}
 	}
 

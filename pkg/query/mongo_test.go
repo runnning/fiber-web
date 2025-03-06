@@ -78,6 +78,7 @@ func TestMongoPaginate(t *testing.T) {
 		},
 	}
 
+	// 使用测试辅助函数创建MongoDB实例
 	WithTestMongoDB(t, func(db *mongo.Database) {
 		ctx := context.Background()
 		coll := db.Collection("users")
@@ -117,20 +118,15 @@ func TestMongoPaginate(t *testing.T) {
 						t.Error("MongoPaginate() expected non-empty result")
 					}
 				}
-
-				// 清理测试数据
-				if err := coll.Drop(ctx); err != nil {
-					t.Errorf("Failed to cleanup test data: %v", err)
-				}
 			})
 		}
 	})
 }
 
 func TestMongoSearchQuery(t *testing.T) {
-	ctx := context.Background()
-
+	// 使用测试辅助函数创建MongoDB实例
 	WithTestMongoDB(t, func(db *mongo.Database) {
+		ctx := context.Background()
 		coll := db.Collection("users")
 
 		// 准备测试数据
@@ -150,6 +146,13 @@ func TestMongoSearchQuery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
 		}
+
+		// 确保测试结束后清理数据
+		defer func() {
+			if err := coll.Drop(ctx); err != nil {
+				t.Errorf("Failed to cleanup test data: %v", err)
+			}
+		}()
 
 		tests := []struct {
 			name      string
@@ -195,18 +198,13 @@ func TestMongoSearchQuery(t *testing.T) {
 				}
 			})
 		}
-
-		// 清理测试数据
-		if err := coll.Drop(ctx); err != nil {
-			t.Errorf("Failed to cleanup test data: %v", err)
-		}
 	})
 }
 
 func TestMongoTimeRangeQuery(t *testing.T) {
-	ctx := context.Background()
-
+	// 使用测试辅助函数创建MongoDB实例
 	WithTestMongoDB(t, func(db *mongo.Database) {
+		ctx := context.Background()
 		coll := db.Collection("users")
 
 		now := time.Now()
@@ -232,6 +230,13 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
 		}
+
+		// 确保测试结束后清理数据
+		defer func() {
+			if err := coll.Drop(ctx); err != nil {
+				t.Errorf("Failed to cleanup test data: %v", err)
+			}
+		}()
 
 		tests := []struct {
 			name      string
@@ -267,11 +272,15 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				// 使用修复后的FilterBuilder和ParseTimeRange函数
 				conditions := ParseTimeRange("created_at", tt.start, tt.end)
 				filter := NewFilterBuilder()
 				for _, condition := range conditions {
 					filter.AddCondition(condition.Field, condition.Operator, condition.Value)
 				}
+
+				// 打印查询条件，帮助调试
+				t.Logf("查询条件: %+v", filter.Build())
 
 				count, err := coll.CountDocuments(ctx, filter.Build())
 				if err != nil {
@@ -282,11 +291,6 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 					t.Errorf("Time range count = %v, want %v", count, tt.wantCount)
 				}
 			})
-		}
-
-		// 清理测试数据
-		if err := coll.Drop(ctx); err != nil {
-			t.Errorf("Failed to cleanup test data: %v", err)
 		}
 	})
 }
