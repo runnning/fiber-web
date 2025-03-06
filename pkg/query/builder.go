@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -10,6 +11,124 @@ import (
 )
 
 // ===== MongoDB查询构建器 =====
+
+// AggregateFunction 聚合函数类型
+type AggregateFunction string
+
+const (
+	AggregateFuncSum   AggregateFunction = "sum"
+	AggregateFuncAvg   AggregateFunction = "avg"
+	AggregateFuncMax   AggregateFunction = "max"
+	AggregateFuncMin   AggregateFunction = "min"
+	AggregateFuncCount AggregateFunction = "count"
+)
+
+// AggregateField 聚合字段配置
+type AggregateField struct {
+	Function AggregateFunction // 聚合函数
+	Field    string            // 目标字段
+	Alias    string            // 结果别名
+}
+
+// GroupOption 分组选项
+type GroupOption struct {
+	Fields     []string         // 分组字段
+	Aggregates []AggregateField // 聚合配置
+}
+
+// NewGroupOption 创建分组选项
+func NewGroupOption() *GroupOption {
+	return &GroupOption{
+		Fields:     make([]string, 0),
+		Aggregates: make([]AggregateField, 0),
+	}
+}
+
+// AddFields 添加分组字段
+func (opt *GroupOption) AddFields(fields ...string) *GroupOption {
+	opt.Fields = append(opt.Fields, fields...)
+	return opt
+}
+
+// AddAggregate 添加聚合配置
+func (opt *GroupOption) AddAggregate(function AggregateFunction, field, alias string) *GroupOption {
+	opt.Aggregates = append(opt.Aggregates, AggregateField{
+		Function: function,
+		Field:    field,
+		Alias:    alias,
+	})
+	return opt
+}
+
+// SelectField 查询字段配置
+type SelectField struct {
+	Field    string            // 字段名
+	Alias    string            // 别名
+	Function AggregateFunction // 聚合函数
+	Args     []interface{}     // 函数参数
+}
+
+// NewSelectField 创建查询字段配置
+func NewSelectField(field string) *SelectField {
+	return &SelectField{
+		Field: field,
+	}
+}
+
+// As 设置别名
+func (f *SelectField) As(alias string) *SelectField {
+	f.Alias = alias
+	return f
+}
+
+// WithFunction 设置聚合函数
+func (f *SelectField) WithFunction(function AggregateFunction, args ...interface{}) *SelectField {
+	f.Function = function
+	f.Args = args
+	return f
+}
+
+// String 转换为SQL字符串
+func (f *SelectField) String() string {
+	if f.Function == "" {
+		if f.Alias == "" {
+			return f.Field
+		}
+		return fmt.Sprintf("%s AS %s", f.Field, f.Alias)
+	}
+
+	var expr string
+	if len(f.Args) > 0 {
+		expr = fmt.Sprintf("%s(%s, %v)", f.Function, f.Field, f.Args)
+	} else {
+		expr = fmt.Sprintf("%s(%s)", f.Function, f.Field)
+	}
+
+	if f.Alias == "" {
+		return expr
+	}
+	return fmt.Sprintf("%s AS %s", expr, f.Alias)
+}
+
+// MongoString 转换为MongoDB表达式
+func (f *SelectField) MongoString() bson.E {
+	if f.Function == "" {
+		return bson.E{Key: f.Field, Value: 1}
+	}
+
+	var value interface{}
+	if len(f.Args) > 0 {
+		value = bson.D{{Key: "$" + string(f.Function), Value: bson.A{"$" + f.Field, f.Args}}}
+	} else {
+		value = bson.D{{Key: "$" + string(f.Function), Value: "$" + f.Field}}
+	}
+
+	key := f.Alias
+	if key == "" {
+		key = f.Field
+	}
+	return bson.E{Key: key, Value: value}
+}
 
 // MongoQuery MongoDB查询结构
 type MongoQuery struct {
@@ -23,6 +142,7 @@ type MongoQuery struct {
 	skip        int64              // 跳过
 	pipeline    []bson.D           // 聚合管道
 	isAggregate bool               // 是否使用聚合查询
+	groupOption *GroupOption       // 分组选项
 }
 
 // NewMongoQuery 创建新的MongoDB查询
@@ -79,7 +199,31 @@ func (q *MongoQuery) WhereRaw(raw interface{}) QueryBuilder {
 func (q *MongoQuery) Select(fields ...string) QueryBuilder {
 	q.fields = append(q.fields, fields...)
 	for _, field := range fields {
-		q.Projection[field] = 1
+		if strings.Contains(field, "(") {
+			// 处理聚合函数
+			q.isAggregate = true
+			// 解析聚合函数表达式
+			if expr := parseAggregateExpr(field); expr != nil {
+				q.Projection[expr.Alias] = expr.MongoString().Value
+			}
+		} else {
+			q.Projection[field] = 1
+		}
+	}
+	return q
+}
+
+// SelectWithFields 使用字段配置设置查询字段
+func (q *MongoQuery) SelectWithFields(fields ...*SelectField) QueryBuilder {
+	for _, field := range fields {
+		if field.Function != "" {
+			q.isAggregate = true
+			expr := field.MongoString()
+			q.Projection[expr.Key] = expr.Value
+		} else {
+			q.Projection[field.Field] = 1
+		}
+		q.fields = append(q.fields, field.String())
 	}
 	return q
 }
@@ -100,20 +244,24 @@ func (q *MongoQuery) GroupBy(field string) QueryBuilder {
 		return q
 	}
 
+	if q.groupOption == nil {
+		q.groupOption = NewGroupOption()
+	}
+	q.groupOption.AddFields(field)
+
 	// 标记为聚合查询
 	q.isAggregate = true
+	return q
+}
 
-	// 构建$group stage
-	groupStage := bson.D{
-		{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: "$" + field},
-			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-		}},
+// GroupByWithOption 使用选项设置分组
+func (q *MongoQuery) GroupByWithOption(option *GroupOption) QueryBuilder {
+	if option == nil {
+		return q
 	}
 
-	// 将分组阶段添加到管道中
-	q.pipeline = append(q.pipeline, groupStage)
-
+	q.groupOption = option
+	q.isAggregate = true
 	return q
 }
 
@@ -204,6 +352,11 @@ func (q *MongoQuery) Build() interface{} {
 			q.pipeline = append([]bson.D{matchStage}, q.pipeline...)
 		}
 
+		// 添加分组stage（如果有分组）
+		if groupStage := q.buildGroupStage(); groupStage != nil {
+			q.pipeline = append(q.pipeline, groupStage)
+		}
+
 		// 添加排序stage（如果有排序）
 		if len(q.sorts) > 0 {
 			sortStage := bson.D{{Key: "$sort", Value: q.sorts}}
@@ -211,14 +364,14 @@ func (q *MongoQuery) Build() interface{} {
 		}
 
 		// 添加限制和跳过stage
-		if q.limit > 0 {
-			limitStage := bson.D{{Key: "$limit", Value: q.limit}}
-			q.pipeline = append(q.pipeline, limitStage)
-		}
-
 		if q.skip > 0 {
 			skipStage := bson.D{{Key: "$skip", Value: q.skip}}
 			q.pipeline = append(q.pipeline, skipStage)
+		}
+
+		if q.limit > 0 {
+			limitStage := bson.D{{Key: "$limit", Value: q.limit}}
+			q.pipeline = append(q.pipeline, limitStage)
 		}
 
 		return q.pipeline
@@ -226,7 +379,6 @@ func (q *MongoQuery) Build() interface{} {
 
 	// 处理条件
 	q.buildConditions()
-
 	return q.Filter
 }
 
@@ -440,6 +592,50 @@ func (q *MongoQuery) buildGroupHavingCondition(condition *GroupCondition) bson.M
 	return bson.M{op: conditions}
 }
 
+// buildGroupStage 构建分组阶段
+func (q *MongoQuery) buildGroupStage() bson.D {
+	if q.groupOption == nil || len(q.groupOption.Fields) == 0 {
+		return nil
+	}
+
+	groupStage := bson.D{{Key: "$group", Value: bson.D{}}}
+	groupValue := groupStage[0].Value.(bson.D)
+
+	// 处理分组字段
+	if len(q.groupOption.Fields) == 1 {
+		groupValue = append(groupValue, bson.E{
+			Key:   "_id",
+			Value: "$" + q.groupOption.Fields[0],
+		})
+	} else {
+		idDoc := bson.D{}
+		for _, field := range q.groupOption.Fields {
+			idDoc = append(idDoc, bson.E{
+				Key:   field,
+				Value: "$" + field,
+			})
+		}
+		groupValue = append(groupValue, bson.E{
+			Key:   "_id",
+			Value: idDoc,
+		})
+	}
+
+	// 处理聚合字段
+	for _, agg := range q.groupOption.Aggregates {
+		groupValue = append(groupValue, bson.E{
+			Key: agg.Alias,
+			Value: bson.D{{
+				Key:   "$" + string(agg.Function),
+				Value: "$" + agg.Field,
+			}},
+		})
+	}
+
+	groupStage[0].Value = groupValue
+	return groupStage
+}
+
 // ===== MongoDB查询工厂 =====
 
 // MongoQueryFactory MongoDB查询工厂
@@ -465,26 +661,50 @@ const (
 	JoinTypeLeft  JoinType = "LEFT JOIN"
 	JoinTypeRight JoinType = "RIGHT JOIN"
 	JoinTypeCross JoinType = "CROSS JOIN"
+	JoinTypeFull  JoinType = "FULL JOIN"
 )
+
+// JoinCondition 连接条件
+type JoinCondition struct {
+	Type      JoinType      // 连接类型
+	Table     string        // 表名
+	Condition string        // 连接条件
+	Args      []interface{} // 条件参数
+}
 
 // MySQLQuery MySQL查询结构
 type MySQLQuery struct {
-	db         *gorm.DB    // 原始数据库连接
-	conditions []Condition // 查询条件
-	fields     []string    // 查询字段
-	joins      []JoinInfo  // 连接查询
-	groupBy    []string    // 分组字段
-	having     []Condition // 分组条件
-	limit      int         // 限制
-	offset     int         // 偏移
-	orders     []string    // 排序
+	db         *gorm.DB        // 原始数据库连接
+	conditions []Condition     // 查询条件
+	fields     []string        // 查询字段
+	joins      []JoinCondition // 连接查询
+	groupBy    []string        // 分组字段
+	having     []Condition     // 分组条件
+	limit      int             // 限制
+	offset     int             // 偏移
+	orders     []string        // 排序
+	subQueries []SubQuery      // 子查询
 }
 
-// JoinInfo 连接信息
-type JoinInfo struct {
-	Type      JoinType // 连接类型
-	Table     string   // 表名
-	Condition string   // 连接条件
+// SubQuery 子查询接口
+type SubQuery interface {
+	Build() interface{}
+	As(alias string) string
+}
+
+// MySQLSubQuery MySQL子查询
+type MySQLSubQuery struct {
+	query QueryBuilder
+	alias string
+}
+
+func (sq *MySQLSubQuery) Build() interface{} {
+	return sq.query.Build()
+}
+
+func (sq *MySQLSubQuery) As(alias string) string {
+	sq.alias = alias
+	return fmt.Sprintf("(%v) AS %s", sq.Build(), alias)
 }
 
 // NewMySQLQuery 创建新的MySQL查询
@@ -493,10 +713,11 @@ func NewMySQLQuery(db *gorm.DB) *MySQLQuery {
 		db:         db,
 		conditions: make([]Condition, 0),
 		fields:     make([]string, 0),
-		joins:      make([]JoinInfo, 0),
+		joins:      make([]JoinCondition, 0),
 		groupBy:    make([]string, 0),
 		having:     make([]Condition, 0),
 		orders:     make([]string, 0),
+		subQueries: make([]SubQuery, 0),
 	}
 }
 
@@ -528,10 +749,19 @@ func (q *MySQLQuery) WhereGroup(logic LogicOperator, conditions ...Condition) Qu
 
 // WhereRaw 添加原始条件
 func (q *MySQLQuery) WhereRaw(raw interface{}) QueryBuilder {
-	if raw != nil {
-		if db, ok := raw.(*gorm.DB); ok {
-			q.db = db
-		}
+	if raw == nil {
+		return q
+	}
+
+	switch v := raw.(type) {
+	case string:
+		q.db = q.db.Where(v)
+	case map[string]interface{}:
+		q.db = q.db.Where(v)
+	case *gorm.DB:
+		q.db = q.db.Where(v)
+	case SubQuery:
+		q.subQueries = append(q.subQueries, v)
 	}
 	return q
 }
@@ -539,6 +769,14 @@ func (q *MySQLQuery) WhereRaw(raw interface{}) QueryBuilder {
 // Select 设置查询字段
 func (q *MySQLQuery) Select(fields ...string) QueryBuilder {
 	q.fields = append(q.fields, fields...)
+	return q
+}
+
+// SelectWithFields 使用字段配置设置查询字段
+func (q *MySQLQuery) SelectWithFields(fields ...*SelectField) QueryBuilder {
+	for _, field := range fields {
+		q.fields = append(q.fields, field.String())
+	}
 	return q
 }
 
@@ -590,10 +828,28 @@ func (q *MySQLQuery) Join(table string, condition string) QueryBuilder {
 // JoinWithType 使用指定类型添加连接
 func (q *MySQLQuery) JoinWithType(table string, condition string, joinType JoinType) QueryBuilder {
 	if table != "" && condition != "" {
-		q.joins = append(q.joins, JoinInfo{
+		q.joins = append(q.joins, JoinCondition{
 			Type:      joinType,
 			Table:     table,
 			Condition: condition,
+		})
+	}
+	return q
+}
+
+// JoinWithArgs 添加带参数的连接
+func (q *MySQLQuery) JoinWithArgs(table string, condition string, args ...interface{}) QueryBuilder {
+	return q.JoinWithTypeAndArgs(table, condition, JoinTypeInner, args...)
+}
+
+// JoinWithTypeAndArgs 使用指定类型添加带参数的连接
+func (q *MySQLQuery) JoinWithTypeAndArgs(table string, condition string, joinType JoinType, args ...interface{}) QueryBuilder {
+	if table != "" && condition != "" {
+		q.joins = append(q.joins, JoinCondition{
+			Type:      joinType,
+			Table:     table,
+			Condition: condition,
+			Args:      args,
 		})
 	}
 	return q
@@ -614,6 +870,40 @@ func (q *MySQLQuery) CrossJoin(table string, condition string) QueryBuilder {
 	return q.JoinWithType(table, condition, JoinTypeCross)
 }
 
+// FullJoin 添加全连接
+func (q *MySQLQuery) FullJoin(table string, condition string) QueryBuilder {
+	return q.JoinWithType(table, condition, JoinTypeFull)
+}
+
+// SubQuery 创建子查询
+func (q *MySQLQuery) SubQuery() SubQuery {
+	return &MySQLSubQuery{query: q}
+}
+
+// WhereExists 添加EXISTS条件
+func (q *MySQLQuery) WhereExists(subQuery SubQuery) QueryBuilder {
+	q.db = q.db.Where("EXISTS (?)", subQuery.Build())
+	return q
+}
+
+// WhereNotExists 添加NOT EXISTS条件
+func (q *MySQLQuery) WhereNotExists(subQuery SubQuery) QueryBuilder {
+	q.db = q.db.Where("NOT EXISTS (?)", subQuery.Build())
+	return q
+}
+
+// Union 添加UNION查询
+func (q *MySQLQuery) Union(other QueryBuilder) QueryBuilder {
+	q.db = q.db.Raw("(?) UNION (?)", q.Build(), other.Build())
+	return q
+}
+
+// UnionAll 添加UNION ALL查询
+func (q *MySQLQuery) UnionAll(other QueryBuilder) QueryBuilder {
+	q.db = q.db.Raw("(?) UNION ALL (?)", q.Build(), other.Build())
+	return q
+}
+
 // Build 实现QueryBuilder接口
 func (q *MySQLQuery) Build() interface{} {
 	return q.buildQuery()
@@ -631,11 +921,20 @@ func (q *MySQLQuery) buildQuery() *gorm.DB {
 	// 添加连接
 	for _, join := range q.joins {
 		joinStr := fmt.Sprintf("%s %s ON %s", join.Type, join.Table, join.Condition)
-		query = query.Joins(joinStr)
+		if len(join.Args) > 0 {
+			query = query.Joins(joinStr, join.Args...)
+		} else {
+			query = query.Joins(joinStr)
+		}
 	}
 
 	// 添加条件
 	query = q.buildConditions(query)
+
+	// 添加子查询
+	for _, subQuery := range q.subQueries {
+		query = query.Where(subQuery.Build())
+	}
 
 	// 添加排序
 	for _, order := range q.orders {
@@ -916,4 +1215,21 @@ func BuildTimeRangeQuery(db *gorm.DB, field string, startTime, endTime interface
 		db = db.Where(fmt.Sprintf("%s <= ?", field), endTime)
 	}
 	return db
+}
+
+// parseAggregateExpr 解析聚合函数表达式
+func parseAggregateExpr(expr string) *SelectField {
+	// 简单的解析，实际使用时可能需要更复杂的解析器
+	matches := regexp.MustCompile(`(\w+)\((.*?)\)(?:\s+[aA][sS]\s+(\w+))?`).FindStringSubmatch(expr)
+	if len(matches) < 3 {
+		return nil
+	}
+
+	field := &SelectField{}
+	field.Function = AggregateFunction(strings.ToLower(matches[1]))
+	field.Field = matches[2]
+	if len(matches) > 3 && matches[3] != "" {
+		field.Alias = matches[3]
+	}
+	return field
 }
