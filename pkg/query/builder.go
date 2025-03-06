@@ -13,14 +13,16 @@ import (
 
 // MongoQuery MongoDB查询结构
 type MongoQuery struct {
-	Filter     bson.M             // 过滤条件
-	Projection bson.M             // 字段投影
-	Collation  *options.Collation // 排序规则
-	conditions []Condition        // 条件列表
-	fields     []string           // 查询字段
-	sorts      bson.D             // 排序
-	limit      int64              // 限制
-	skip       int64              // 跳过
+	Filter      bson.M             // 过滤条件
+	Projection  bson.M             // 字段投影
+	Collation   *options.Collation // 排序规则
+	conditions  []Condition        // 条件列表
+	fields      []string           // 查询字段
+	sorts       bson.D             // 排序
+	limit       int64              // 限制
+	skip        int64              // 跳过
+	pipeline    []bson.D           // 聚合管道
+	isAggregate bool               // 是否使用聚合查询
 }
 
 // NewMongoQuery 创建新的MongoDB查询
@@ -31,6 +33,7 @@ func NewMongoQuery() *MongoQuery {
 		conditions: make([]Condition, 0),
 		fields:     make([]string, 0),
 		sorts:      make(bson.D, 0),
+		pipeline:   make([]bson.D, 0),
 	}
 }
 
@@ -91,15 +94,44 @@ func (q *MongoQuery) OrderBy(field string, direction string) QueryBuilder {
 	return q
 }
 
-// GroupBy 设置分组（MongoDB使用聚合管道实现，此处简化处理）
+// GroupBy 设置分组
 func (q *MongoQuery) GroupBy(field string) QueryBuilder {
-	// MongoDB分组需要使用聚合管道，此处简化处理
+	if field == "" {
+		return q
+	}
+
+	// 标记为聚合查询
+	q.isAggregate = true
+
+	// 构建$group stage
+	groupStage := bson.D{
+		{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$" + field},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}},
+	}
+
+	// 将分组阶段添加到管道中
+	q.pipeline = append(q.pipeline, groupStage)
+
 	return q
 }
 
-// Having 设置分组条件（MongoDB使用聚合管道实现，此处简化处理）
+// Having 设置分组条件
 func (q *MongoQuery) Having(condition Condition) QueryBuilder {
-	// MongoDB分组条件需要使用聚合管道，此处简化处理
+	if condition == nil {
+		return q
+	}
+
+	// 标记为聚合查询
+	q.isAggregate = true
+
+	// 构建$match stage用于Having条件
+	matchStage := bson.D{{Key: "$match", Value: q.buildHavingCondition(condition)}}
+
+	// 将匹配阶段添加到管道中
+	q.pipeline = append(q.pipeline, matchStage)
+
 	return q
 }
 
@@ -115,14 +147,83 @@ func (q *MongoQuery) Offset(offset int) QueryBuilder {
 	return q
 }
 
-// Join 添加连接（MongoDB使用聚合管道实现，此处简化处理）
+// Join 添加连接查询
 func (q *MongoQuery) Join(table string, condition string) QueryBuilder {
-	// MongoDB连接需要使用聚合管道的$lookup，此处简化处理
+	if table == "" || condition == "" {
+		return q
+	}
+
+	// 标记为聚合查询
+	q.isAggregate = true
+
+	// 解析连接条件
+	parts := strings.Split(condition, "=")
+	if len(parts) != 2 {
+		return q
+	}
+
+	localField := strings.TrimSpace(parts[0])
+	foreignField := strings.TrimSpace(parts[1])
+
+	// 移除字段名中的表名前缀
+	localField = strings.TrimPrefix(localField, table+".")
+
+	// 构建$lookup stage
+	lookupStage := bson.D{
+		{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: table},
+			{Key: "localField", Value: localField},
+			{Key: "foreignField", Value: foreignField},
+			{Key: "as", Value: table},
+		}},
+	}
+
+	// 将连接阶段添加到管道中
+	q.pipeline = append(q.pipeline, lookupStage)
+
+	// 添加展开阶段，将数组转换为文档
+	unwindStage := bson.D{
+		{Key: "$unwind", Value: bson.D{
+			{Key: "path", Value: "$" + table},
+			{Key: "preserveNullAndEmptyArrays", Value: true},
+		}},
+	}
+
+	q.pipeline = append(q.pipeline, unwindStage)
+
 	return q
 }
 
 // Build 实现QueryBuilder接口
 func (q *MongoQuery) Build() interface{} {
+	// 如果是聚合查询，返回聚合管道
+	if q.isAggregate {
+		// 添加初始的$match stage（如果有过滤条件）
+		if len(q.Filter) > 0 {
+			matchStage := bson.D{{Key: "$match", Value: q.Filter}}
+			q.pipeline = append([]bson.D{matchStage}, q.pipeline...)
+		}
+
+		// 添加排序stage（如果有排序）
+		if len(q.sorts) > 0 {
+			sortStage := bson.D{{Key: "$sort", Value: q.sorts}}
+			q.pipeline = append(q.pipeline, sortStage)
+		}
+
+		// 添加限制和跳过stage
+		if q.limit > 0 {
+			limitStage := bson.D{{Key: "$limit", Value: q.limit}}
+			q.pipeline = append(q.pipeline, limitStage)
+		}
+
+		if q.skip > 0 {
+			skipStage := bson.D{{Key: "$skip", Value: q.skip}}
+			q.pipeline = append(q.pipeline, skipStage)
+		}
+
+		return q.pipeline
+	}
+
 	// 处理条件
 	q.buildConditions()
 
@@ -284,6 +385,61 @@ func (q *MongoQuery) GetFindOptions() *options.FindOptions {
 	return opts
 }
 
+// buildHavingCondition 构建Having条件
+func (q *MongoQuery) buildHavingCondition(condition Condition) bson.M {
+	switch condition.GetType() {
+	case ConditionTypeSimple:
+		return q.buildSimpleHavingCondition(condition.(*SimpleCondition))
+	case ConditionTypeGroup:
+		return q.buildGroupHavingCondition(condition.(*GroupCondition))
+	case ConditionTypeRaw:
+		if raw, ok := condition.(*RawCondition).Raw.(bson.M); ok {
+			return raw
+		}
+	}
+	return bson.M{}
+}
+
+// buildSimpleHavingCondition 构建简单Having条件
+func (q *MongoQuery) buildSimpleHavingCondition(condition *SimpleCondition) bson.M {
+	field := condition.Field
+	value := condition.Value
+
+	switch condition.Operator {
+	case OpEq:
+		return bson.M{field: value}
+	case OpGt:
+		return bson.M{field: bson.M{"$gt": value}}
+	case OpGte:
+		return bson.M{field: bson.M{"$gte": value}}
+	case OpLt:
+		return bson.M{field: bson.M{"$lt": value}}
+	case OpLte:
+		return bson.M{field: bson.M{"$lte": value}}
+	default:
+		return bson.M{}
+	}
+}
+
+// buildGroupHavingCondition 构建分组Having条件
+func (q *MongoQuery) buildGroupHavingCondition(condition *GroupCondition) bson.M {
+	if len(condition.Conditions) == 0 {
+		return bson.M{}
+	}
+
+	conditions := make([]bson.M, 0)
+	for _, cond := range condition.Conditions {
+		conditions = append(conditions, q.buildHavingCondition(cond))
+	}
+
+	op := "$and"
+	if condition.Logic == LogicOr {
+		op = "$or"
+	}
+
+	return bson.M{op: conditions}
+}
+
 // ===== MongoDB查询工厂 =====
 
 // MongoQueryFactory MongoDB查询工厂
@@ -301,17 +457,34 @@ func (f *MongoQueryFactory) NewQuery() QueryBuilder {
 
 // ===== MySQL查询构建器 =====
 
+// JoinType 连接类型
+type JoinType string
+
+const (
+	JoinTypeInner JoinType = "INNER JOIN"
+	JoinTypeLeft  JoinType = "LEFT JOIN"
+	JoinTypeRight JoinType = "RIGHT JOIN"
+	JoinTypeCross JoinType = "CROSS JOIN"
+)
+
 // MySQLQuery MySQL查询结构
 type MySQLQuery struct {
 	db         *gorm.DB    // 原始数据库连接
 	conditions []Condition // 查询条件
 	fields     []string    // 查询字段
-	joins      []string    // 连接查询
-	groupBy    string      // 分组
-	having     Condition   // 分组条件
+	joins      []JoinInfo  // 连接查询
+	groupBy    []string    // 分组字段
+	having     []Condition // 分组条件
 	limit      int         // 限制
 	offset     int         // 偏移
 	orders     []string    // 排序
+}
+
+// JoinInfo 连接信息
+type JoinInfo struct {
+	Type      JoinType // 连接类型
+	Table     string   // 表名
+	Condition string   // 连接条件
 }
 
 // NewMySQLQuery 创建新的MySQL查询
@@ -320,7 +493,9 @@ func NewMySQLQuery(db *gorm.DB) *MySQLQuery {
 		db:         db,
 		conditions: make([]Condition, 0),
 		fields:     make([]string, 0),
-		joins:      make([]string, 0),
+		joins:      make([]JoinInfo, 0),
+		groupBy:    make([]string, 0),
+		having:     make([]Condition, 0),
 		orders:     make([]string, 0),
 	}
 }
@@ -381,13 +556,17 @@ func (q *MySQLQuery) OrderBy(field string, direction string) QueryBuilder {
 
 // GroupBy 设置分组
 func (q *MySQLQuery) GroupBy(field string) QueryBuilder {
-	q.groupBy = field
+	if field != "" {
+		q.groupBy = append(q.groupBy, field)
+	}
 	return q
 }
 
 // Having 设置分组条件
 func (q *MySQLQuery) Having(condition Condition) QueryBuilder {
-	q.having = condition
+	if condition != nil {
+		q.having = append(q.having, condition)
+	}
 	return q
 }
 
@@ -405,11 +584,34 @@ func (q *MySQLQuery) Offset(offset int) QueryBuilder {
 
 // Join 添加连接
 func (q *MySQLQuery) Join(table string, condition string) QueryBuilder {
+	return q.JoinWithType(table, condition, JoinTypeInner)
+}
+
+// JoinWithType 使用指定类型添加连接
+func (q *MySQLQuery) JoinWithType(table string, condition string, joinType JoinType) QueryBuilder {
 	if table != "" && condition != "" {
-		join := fmt.Sprintf("JOIN %s ON %s", table, condition)
-		q.joins = append(q.joins, join)
+		q.joins = append(q.joins, JoinInfo{
+			Type:      joinType,
+			Table:     table,
+			Condition: condition,
+		})
 	}
 	return q
+}
+
+// LeftJoin 添加左连接
+func (q *MySQLQuery) LeftJoin(table string, condition string) QueryBuilder {
+	return q.JoinWithType(table, condition, JoinTypeLeft)
+}
+
+// RightJoin 添加右连接
+func (q *MySQLQuery) RightJoin(table string, condition string) QueryBuilder {
+	return q.JoinWithType(table, condition, JoinTypeRight)
+}
+
+// CrossJoin 添加交叉连接
+func (q *MySQLQuery) CrossJoin(table string, condition string) QueryBuilder {
+	return q.JoinWithType(table, condition, JoinTypeCross)
 }
 
 // Build 实现QueryBuilder接口
@@ -428,7 +630,8 @@ func (q *MySQLQuery) buildQuery() *gorm.DB {
 
 	// 添加连接
 	for _, join := range q.joins {
-		query = query.Joins(join)
+		joinStr := fmt.Sprintf("%s %s ON %s", join.Type, join.Table, join.Condition)
+		query = query.Joins(joinStr)
 	}
 
 	// 添加条件
@@ -440,12 +643,12 @@ func (q *MySQLQuery) buildQuery() *gorm.DB {
 	}
 
 	// 添加分组
-	if q.groupBy != "" {
-		query = query.Group(q.groupBy)
+	if len(q.groupBy) > 0 {
+		query = query.Group(strings.Join(q.groupBy, ", "))
 
 		// 添加分组条件
-		if q.having != nil {
-			query = q.buildHavingCondition(query, q.having)
+		if len(q.having) > 0 {
+			query = q.buildHavingConditions(query)
 		}
 	}
 
@@ -584,34 +787,86 @@ func (q *MySQLQuery) buildRawCondition(query *gorm.DB, condition *RawCondition) 
 	return query
 }
 
-// buildHavingCondition 构建HAVING条件
+// buildHavingConditions 构建所有Having条件
+func (q *MySQLQuery) buildHavingConditions(query *gorm.DB) *gorm.DB {
+	for _, condition := range q.having {
+		query = q.buildHavingCondition(query, condition)
+	}
+	return query
+}
+
+// buildHavingCondition 构建Having条件
 func (q *MySQLQuery) buildHavingCondition(query *gorm.DB, condition Condition) *gorm.DB {
 	if condition == nil {
 		return query
 	}
 
-	// 简化处理，仅支持简单条件
-	if condition.GetType() == ConditionTypeSimple {
-		simple := condition.(*SimpleCondition)
-		field := simple.Field
-		value := simple.Value
+	switch condition.GetType() {
+	case ConditionTypeSimple:
+		return q.buildSimpleHavingCondition(query, condition.(*SimpleCondition))
+	case ConditionTypeGroup:
+		return q.buildGroupHavingCondition(query, condition.(*GroupCondition))
+	case ConditionTypeRaw:
+		return q.buildRawHavingCondition(query, condition.(*RawCondition))
+	}
+	return query
+}
 
-		switch simple.Operator {
-		case OpEq:
-			return query.Having(fmt.Sprintf("%s = ?", field), value)
-		case OpNe:
-			return query.Having(fmt.Sprintf("%s != ?", field), value)
-		case OpGt:
-			return query.Having(fmt.Sprintf("%s > ?", field), value)
-		case OpGte:
-			return query.Having(fmt.Sprintf("%s >= ?", field), value)
-		case OpLt:
-			return query.Having(fmt.Sprintf("%s < ?", field), value)
-		case OpLte:
-			return query.Having(fmt.Sprintf("%s <= ?", field), value)
+// buildSimpleHavingCondition 构建简单Having条件
+func (q *MySQLQuery) buildSimpleHavingCondition(query *gorm.DB, condition *SimpleCondition) *gorm.DB {
+	field := condition.Field
+	value := condition.Value
+
+	switch condition.Operator {
+	case OpEq:
+		return query.Having(fmt.Sprintf("%s = ?", field), value)
+	case OpNe:
+		return query.Having(fmt.Sprintf("%s != ?", field), value)
+	case OpGt:
+		return query.Having(fmt.Sprintf("%s > ?", field), value)
+	case OpGte:
+		return query.Having(fmt.Sprintf("%s >= ?", field), value)
+	case OpLt:
+		return query.Having(fmt.Sprintf("%s < ?", field), value)
+	case OpLte:
+		return query.Having(fmt.Sprintf("%s <= ?", field), value)
+	case OpIn:
+		return query.Having(fmt.Sprintf("%s IN ?", field), value)
+	case OpNin:
+		return query.Having(fmt.Sprintf("%s NOT IN ?", field), value)
+	case OpBetween:
+		if values, ok := value.([]interface{}); ok && len(values) == 2 {
+			return query.Having(fmt.Sprintf("%s BETWEEN ? AND ?", field), values[0], values[1])
 		}
 	}
+	return query
+}
 
+// buildGroupHavingCondition 构建Having条件组
+func (q *MySQLQuery) buildGroupHavingCondition(query *gorm.DB, condition *GroupCondition) *gorm.DB {
+	if len(condition.Conditions) == 0 {
+		return query
+	}
+
+	return query.Having(func(db *gorm.DB) *gorm.DB {
+		for i, cond := range condition.Conditions {
+			if i == 0 || condition.Logic == LogicAnd {
+				db = q.buildHavingCondition(db, cond)
+			} else {
+				db = db.Or(func(subDb *gorm.DB) *gorm.DB {
+					return q.buildHavingCondition(subDb, cond)
+				})
+			}
+		}
+		return db
+	})
+}
+
+// buildRawHavingCondition 构建原始Having条件
+func (q *MySQLQuery) buildRawHavingCondition(query *gorm.DB, condition *RawCondition) *gorm.DB {
+	if raw, ok := condition.Raw.(string); ok {
+		return query.Having(raw)
+	}
 	return query
 }
 
