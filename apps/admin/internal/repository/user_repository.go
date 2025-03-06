@@ -5,7 +5,7 @@ import (
 	"fiber_web/apps/admin/internal/entity"
 	"fiber_web/pkg/query"
 
-	"github.com/redis/go-redis/v9"
+	"fiber_web/pkg/redis"
 	"gorm.io/gorm"
 )
 

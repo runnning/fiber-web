@@ -7,7 +7,7 @@ import (
 	"{{.ModuleName}}/internal/entity"
 	"{{.ModuleName}}/pkg/query"
 
-	"github.com/redis/go-redis/v9"
+	"{{.ModuleName}}/pkg/redis"
 	"gorm.io/gorm"
 )
 
