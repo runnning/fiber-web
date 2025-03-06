@@ -24,6 +24,9 @@ const (
 	OpStartsWith Operator = "startsWith" // 以...开始
 	OpEndsWith   Operator = "endsWith"   // 以...结束
 	OpExists     Operator = "exists"     // 字段存在
+	OpBetween    Operator = "between"    // 范围查询
+	OpIsNull     Operator = "isNull"     // 是否为空
+	OpNotNull    Operator = "notNull"    // 是否不为空
 )
 
 // FilterCondition 单个过滤条件
@@ -173,4 +176,156 @@ func ParseSearchText(searchText string, fields []string) []FilterCondition {
 	}
 
 	return conditions
+}
+
+// NewSimpleCondition 创建简单条件
+func NewSimpleCondition(field string, op Operator, value interface{}) *SimpleCondition {
+	return &SimpleCondition{
+		Field:    field,
+		Operator: op,
+		Value:    value,
+	}
+}
+
+// NewGroupCondition 创建条件组
+func NewGroupCondition(logic LogicOperator, conditions ...Condition) *GroupCondition {
+	return &GroupCondition{
+		Logic:      logic,
+		Conditions: conditions,
+	}
+}
+
+// NewRawCondition 创建原始条件
+func NewRawCondition(raw interface{}) *RawCondition {
+	return &RawCondition{
+		Raw: raw,
+	}
+}
+
+// NewAndCondition 创建AND条件组
+func NewAndCondition(conditions ...Condition) *GroupCondition {
+	return NewGroupCondition(LogicAnd, conditions...)
+}
+
+// NewOrCondition 创建OR条件组
+func NewOrCondition(conditions ...Condition) *GroupCondition {
+	return NewGroupCondition(LogicOr, conditions...)
+}
+
+// NewEqCondition 创建等于条件
+func NewEqCondition(field string, value interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpEq, value)
+}
+
+// NewNeCondition 创建不等于条件
+func NewNeCondition(field string, value interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpNe, value)
+}
+
+// NewGtCondition 创建大于条件
+func NewGtCondition(field string, value interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpGt, value)
+}
+
+// NewGteCondition 创建大于等于条件
+func NewGteCondition(field string, value interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpGte, value)
+}
+
+// NewLtCondition 创建小于条件
+func NewLtCondition(field string, value interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpLt, value)
+}
+
+// NewLteCondition 创建小于等于条件
+func NewLteCondition(field string, value interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpLte, value)
+}
+
+// NewInCondition 创建IN条件
+func NewInCondition(field string, values []interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpIn, values)
+}
+
+// NewNinCondition 创建NOT IN条件
+func NewNinCondition(field string, values []interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpNin, values)
+}
+
+// NewContainsCondition 创建包含条件
+func NewContainsCondition(field string, value string) *SimpleCondition {
+	return NewSimpleCondition(field, OpContains, value)
+}
+
+// NewStartsWithCondition 创建以...开始条件
+func NewStartsWithCondition(field string, value string) *SimpleCondition {
+	return NewSimpleCondition(field, OpStartsWith, value)
+}
+
+// NewEndsWithCondition 创建以...结束条件
+func NewEndsWithCondition(field string, value string) *SimpleCondition {
+	return NewSimpleCondition(field, OpEndsWith, value)
+}
+
+// NewExistsCondition 创建字段存在条件
+func NewExistsCondition(field string, exists bool) *SimpleCondition {
+	return NewSimpleCondition(field, OpExists, exists)
+}
+
+// NewBetweenCondition 创建范围条件
+func NewBetweenCondition(field string, min, max interface{}) *SimpleCondition {
+	return NewSimpleCondition(field, OpBetween, []interface{}{min, max})
+}
+
+// NewIsNullCondition 创建是否为空条件
+func NewIsNullCondition(field string) *SimpleCondition {
+	return NewSimpleCondition(field, OpIsNull, nil)
+}
+
+// NewNotNullCondition 创建是否不为空条件
+func NewNotNullCondition(field string) *SimpleCondition {
+	return NewSimpleCondition(field, OpNotNull, nil)
+}
+
+// NewTimeRangeCondition 创建时间范围条件
+func NewTimeRangeCondition(field string, startTime, endTime *time.Time) Condition {
+	conditions := make([]Condition, 0)
+
+	if startTime != nil {
+		conditions = append(conditions, NewGteCondition(field, *startTime))
+	}
+
+	if endTime != nil {
+		conditions = append(conditions, NewLteCondition(field, *endTime))
+	}
+
+	if len(conditions) == 0 {
+		return nil
+	}
+
+	if len(conditions) == 1 {
+		return conditions[0]
+	}
+
+	return NewAndCondition(conditions...)
+}
+
+// NewSearchCondition 创建搜索条件（多字段模糊查询）
+func NewSearchCondition(searchText string, fields []string) Condition {
+	if searchText == "" || len(fields) == 0 {
+		return nil
+	}
+
+	searchText = strings.TrimSpace(searchText)
+	conditions := make([]Condition, 0, len(fields))
+
+	for _, field := range fields {
+		conditions = append(conditions, NewContainsCondition(field, searchText))
+	}
+
+	if len(conditions) == 1 {
+		return conditions[0]
+	}
+
+	return NewOrCondition(conditions...)
 }

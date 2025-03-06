@@ -17,7 +17,7 @@ type {{.Name}}UseCase interface {
 	Get{{.Name}}(ctx context.Context, id uint) (*entity.{{.Name}}, error)
 	Update{{.Name}}(ctx context.Context, {{.VarName}} *entity.{{.Name}}) error
 	Delete{{.Name}}(ctx context.Context, id uint) error
-	List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error)
+	List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.{{.Name}}], error)
 }
 
 // {{.VarName}}UseCase 用例实现
@@ -48,16 +48,16 @@ func (uc *{{.VarName}}UseCase) Delete{{.Name}}(ctx context.Context, id uint) err
 	return uc.{{.VarName}}Repo.Delete(ctx, id)
 }
 
-func (uc *{{.VarName}}UseCase) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error) {
+func (uc *{{.VarName}}UseCase) List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.{{.Name}}], error) {
 	// 处理查询参数和业务逻辑
 	
 	// 参数验证
-	// if req.Page <= 0 {
-	// 	req.Page = 1
-	// }
-	// if req.PageSize <= 0 || req.PageSize > 100 {
-	// 	req.PageSize = 10 // 限制最大页面大小
-	// }
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10 // 限制最大页面大小
+	}
 	
 	// 设置默认排序
 	if req.OrderBy == "" {
@@ -91,8 +91,21 @@ func (uc *{{.VarName}}UseCase) List(ctx context.Context, req *query.PageRequest)
 		}
 	}
 	
+	// 对查询构建器进行业务逻辑相关的修改
+	if queryBuilder != nil {
+		// 例如：根据用户角色添加额外的查询条件
+		// 如果当前用户不是管理员，可能需要限制只能查看特定状态的记录
+		// queryBuilder.WhereSimple("status", query.OpEq, "active")
+		
+		// 或者添加默认的排序条件
+		// queryBuilder.OrderBy("created_at", "DESC")
+		
+		// 或者添加安全相关的条件，如排除敏感记录
+		// queryBuilder.WhereSimple("is_sensitive", query.OpEq, false)
+	}
+	
 	// 调用仓库层执行查询
-	result, err := uc.{{.VarName}}Repo.List(ctx, req)
+	result, err := uc.{{.VarName}}Repo.List(ctx, req, queryBuilder)
 	if err != nil {
 		return nil, err
 	}

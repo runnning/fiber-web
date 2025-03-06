@@ -8,7 +8,8 @@ import (
 	"{{.ModuleName}}/pkg/query"
 	"{{.ModuleName}}/pkg/response"
 	"{{.ModuleName}}/pkg/validator"
-	"{{.ModuleName}}/pkg/ctx"
+	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -95,33 +96,55 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 }
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
-	// 获取分页参数
-	req := ctx.GetPagination(c)
+	// 解析分页参数
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	
+	// 创建分页请求
+	req := query.NewPageRequest(page, pageSize)
+	req.OrderBy = c.Query("orderBy", "id")
+	req.Order = c.Query("order", "DESC")
+	
+	// 创建查询构建器
+	queryBuilder := query.NewMySQLQueryFactory(nil).NewQuery()
 	
 	// 添加过滤条件
 	if status := c.Query("status"); status != "" {
-		req.AddFilter("status", status)
+		queryBuilder.WhereSimple("status", query.OpEq, status)
 	}
 	
 	if category := c.Query("category"); category != "" {
-		req.AddFilter("category", category)
+		queryBuilder.WhereSimple("category", query.OpEq, category)
 	}
 	
 	if search := c.Query("search"); search != "" {
-		req.AddFilter("search", search)
+		searchCondition := query.NewSearchCondition(search, []string{"name"})
+		queryBuilder.Where(searchCondition)
 	}
 	
 	// 添加时间范围过滤
-	if startTime := c.Query("start_time"); startTime != "" {
-		req.AddFilter("start_time", startTime)
+	var startTime, endTime *time.Time
+	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
+		t, err := time.Parse(time.RFC3339, startTimeStr)
+		if err == nil {
+			startTime = &t
+		}
 	}
 	
-	if endTime := c.Query("end_time"); endTime != "" {
-		req.AddFilter("end_time", endTime)
+	if endTimeStr := c.Query("end_time"); endTimeStr != "" {
+		t, err := time.Parse(time.RFC3339, endTimeStr)
+		if err == nil {
+			endTime = &t
+		}
+	}
+	
+	if startTime != nil || endTime != nil {
+		timeCondition := query.NewTimeRangeCondition("created_at", startTime, endTime)
+		queryBuilder.Where(timeCondition)
 	}
 	
 	// 调用业务逻辑层
-	result, err := h.{{.VarName}}UseCase.List(c.Context(), req)
+	result, err := h.{{.VarName}}UseCase.List(c.Context(), req, queryBuilder)
 	if err != nil {
 		return response.ServerError(c, err)
 	}

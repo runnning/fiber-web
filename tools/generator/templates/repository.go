@@ -6,7 +6,8 @@ import (
 	"context"
 	"{{.ModuleName}}/internal/entity"
 	"{{.ModuleName}}/pkg/query"
-	"{{.ModuleName}}/pkg/redis"
+
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +16,7 @@ type {{.Name}}Repository interface {
 	FindByID(ctx context.Context, id uint) (*entity.{{.Name}}, error)
 	Update(ctx context.Context, {{.VarName}} *entity.{{.Name}}) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error)
+	List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.{{.Name}}], error)
 }
 
 type {{.VarName}}Repository struct {
@@ -48,39 +49,25 @@ func (r *{{.VarName}}Repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&entity.{{.Name}}{}, id).Error
 }
 
-func (r *{{.VarName}}Repository) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error) {
+func (r *{{.VarName}}Repository) List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.{{.Name}}], error) {
 	var {{.VarName}}s []entity.{{.Name}}
-	db := r.db.WithContext(ctx).Model(&entity.{{.Name}}{})
 	
-	// 处理搜索条件
-	if search := req.GetFilter("search"); search != "" {
-		db = query.BuildSearchQuery(db, search, []string{"name"})
-	}
-	
-	// 处理状态过滤
-	if status := req.GetFilter("status"); status != "" {
-		db = db.Where("status = ?", status)
-	}
-	
-	// 处理时间范围
-	startTime := req.GetFilter("start_time")
-	endTime := req.GetFilter("end_time")
-	if startTime != "" || endTime != "" {
-		db = query.BuildTimeRangeQuery(db, "created_at", startTime, endTime)
-	}
-	
-	// 构建查询
-	builder := query.NewMySQLQuery(db)
-	
-	// 添加其他条件
-	if category := req.GetFilter("category"); category != "" {
-		builder.AddCondition("category", query.OpEq, category)
+	// 使用传入的查询构建器
+	// 如果查询构建器为空，创建一个新的
+	if queryBuilder == nil {
+		// 创建一个新的查询构建器
+		factory := query.NewMySQLQueryFactory(r.db)
+		queryBuilder = factory.NewQuery()
+		
+		// 设置模型
+		db := r.db.WithContext(ctx).Model(&entity.{{.Name}}{})
+		queryBuilder.WhereRaw(db)
 	}
 	
 	// 创建数据提供者
 	provider := query.NewMySQLProvider[entity.{{.Name}}](r.db)
 	
 	// 执行分页查询
-	return query.Paginate(ctx, builder, provider, req, &{{.VarName}}s)
+	return query.Paginate(ctx, queryBuilder, provider, req, &{{.VarName}}s)
 }
 `

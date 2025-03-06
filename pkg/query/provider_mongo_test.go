@@ -20,11 +20,12 @@ type MongoUser struct {
 
 func TestMongoPaginate(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(context.Context, *mongo.Collection) error
-		req       *PageRequest
-		wantTotal int64
-		wantErr   bool
+		name       string
+		setup      func(context.Context, *mongo.Collection) error
+		buildQuery func() QueryBuilder
+		req        *PageRequest
+		wantTotal  int64
+		wantErr    bool
 	}{
 		{
 			name: "正常分页",
@@ -55,6 +56,9 @@ func TestMongoPaginate(t *testing.T) {
 				_, err := coll.InsertMany(ctx, users)
 				return err
 			},
+			buildQuery: func() QueryBuilder {
+				return NewMongoQuery()
+			},
 			req: &PageRequest{
 				Page:     1,
 				PageSize: 2,
@@ -65,9 +69,32 @@ func TestMongoPaginate(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name: "带条件的查询",
+			setup: func(ctx context.Context, coll *mongo.Collection) error {
+				// 使用上一个测试的数据
+				return nil
+			},
+			buildQuery: func() QueryBuilder {
+				query := NewMongoQuery()
+				query.WhereSimple("status", OpEq, "active")
+				return query
+			},
+			req: &PageRequest{
+				Page:     1,
+				PageSize: 10,
+				OrderBy:  "age",
+				Order:    "ASC",
+			},
+			wantTotal: 2,
+			wantErr:   false,
+		},
+		{
 			name: "空结果",
 			setup: func(ctx context.Context, coll *mongo.Collection) error {
 				return coll.Drop(ctx)
+			},
+			buildQuery: func() QueryBuilder {
+				return NewMongoQuery()
 			},
 			req: &PageRequest{
 				Page:     1,
@@ -93,7 +120,7 @@ func TestMongoPaginate(t *testing.T) {
 				}
 
 				var users []MongoUser
-				query := NewMongoQuery()
+				query := tt.buildQuery()
 				provider := NewMongoProvider[MongoUser](coll)
 
 				resp, err := Paginate(ctx, query, provider, tt.req, &users)
@@ -184,13 +211,14 @@ func TestMongoSearchQuery(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				conditions := ParseSearchText(tt.search, tt.fields)
-				filter := NewFilterBuilder()
-				for _, condition := range conditions {
-					filter.AddCondition(condition.Field, condition.Operator, condition.Value)
-				}
+				// 使用新的条件构建方式
+				searchCondition := NewSearchCondition(tt.search, tt.fields)
+				query := NewMongoQuery()
+				query.Where(searchCondition)
 
-				count, err := coll.CountDocuments(ctx, filter.Build())
+				// 构建查询并执行
+				filter := query.Build()
+				count, err := coll.CountDocuments(ctx, filter)
 				if err != nil {
 					t.Errorf("Failed to count documents: %v", err)
 				}
@@ -253,20 +281,26 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 				wantCount: 3,
 			},
 			{
-				name:      "只有开始时间",
+				name:      "仅过去时间",
+				start:     &yesterday,
+				end:       &now,
+				wantCount: 2,
+			},
+			{
+				name:      "仅未来时间",
+				start:     &now,
+				end:       &tomorrow,
+				wantCount: 2,
+			},
+			{
+				name:      "仅开始时间",
 				start:     &now,
 				end:       nil,
 				wantCount: 2,
 			},
 			{
-				name:      "只有结束时间",
+				name:      "仅结束时间",
 				start:     nil,
-				end:       &now,
-				wantCount: 2,
-			},
-			{
-				name:      "精确时间范围",
-				start:     &yesterday,
 				end:       &now,
 				wantCount: 2,
 			},
@@ -274,13 +308,14 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				conditions := ParseTimeRange("created_at", tt.start, tt.end)
-				filter := NewFilterBuilder()
-				for _, condition := range conditions {
-					filter.AddCondition(condition.Field, condition.Operator, condition.Value)
-				}
+				// 使用新的条件构建方式
+				timeCondition := NewTimeRangeCondition("created_at", tt.start, tt.end)
+				query := NewMongoQuery()
+				query.Where(timeCondition)
 
-				count, err := coll.CountDocuments(ctx, filter.Build())
+				// 构建查询并执行
+				filter := query.Build()
+				count, err := coll.CountDocuments(ctx, filter)
 				if err != nil {
 					t.Errorf("Failed to count documents: %v", err)
 				}

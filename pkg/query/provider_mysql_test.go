@@ -20,11 +20,12 @@ type User struct {
 
 func TestMySQLPaginate(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(*gorm.DB) error
-		req       *PageRequest
-		wantTotal int64
-		wantErr   bool
+		name       string
+		setup      func(*gorm.DB) error
+		buildQuery func(*gorm.DB) QueryBuilder
+		req        *PageRequest
+		wantTotal  int64
+		wantErr    bool
 	}{
 		{
 			name: "正常分页",
@@ -36,6 +37,9 @@ func TestMySQLPaginate(t *testing.T) {
 				}
 				return db.Create(&users).Error
 			},
+			buildQuery: func(db *gorm.DB) QueryBuilder {
+				return NewMySQLQuery(db.Model(&User{}))
+			},
 			req: &PageRequest{
 				Page:     1,
 				PageSize: 2,
@@ -46,9 +50,32 @@ func TestMySQLPaginate(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name: "带条件的查询",
+			setup: func(db *gorm.DB) error {
+				// 使用上一个测试的数据
+				return nil
+			},
+			buildQuery: func(db *gorm.DB) QueryBuilder {
+				query := NewMySQLQuery(db.Model(&User{}))
+				query.WhereSimple("status", OpEq, "active")
+				return query
+			},
+			req: &PageRequest{
+				Page:     1,
+				PageSize: 10,
+				OrderBy:  "age",
+				Order:    "ASC",
+			},
+			wantTotal: 2,
+			wantErr:   false,
+		},
+		{
 			name: "空结果",
 			setup: func(db *gorm.DB) error {
-				return db.Exec("DELETE FROM user").Error
+				return db.Exec("DELETE FROM users").Error
+			},
+			buildQuery: func(db *gorm.DB) QueryBuilder {
+				return NewMySQLQuery(db.Model(&User{}))
 			},
 			req: &PageRequest{
 				Page:     1,
@@ -75,7 +102,7 @@ func TestMySQLPaginate(t *testing.T) {
 				}
 
 				var users []User
-				query := NewMySQLQuery(db.Model(&User{}))
+				query := tt.buildQuery(db)
 				provider := NewMySQLProvider[User](db)
 
 				ctx := context.Background()
@@ -105,7 +132,7 @@ func TestMySQLPaginate(t *testing.T) {
 				}
 
 				// 清理测试数据
-				if err := db.Exec("DELETE FROM user").Error; err != nil {
+				if err := db.Exec("DELETE FROM users").Error; err != nil {
 					t.Errorf("Failed to cleanup test data: %v", err)
 				}
 			})
