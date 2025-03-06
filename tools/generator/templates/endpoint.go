@@ -6,11 +6,11 @@ import (
 	"{{.ModuleName}}/internal/entity"
 	"{{.ModuleName}}/internal/usecase"
 	"{{.ModuleName}}/pkg/query"
-	"{{.ModuleName}}/pkg/response"
+	"{{.ModuleName}}/pkg/ctx"
+	"{{.ModuleName}}/pkg/validator"
 	"{{.ModuleName}}/pkg/validator"
 	"strconv"
 	"time"
-
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -97,13 +97,13 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
 	// 解析分页参数
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	//page, _ := strconv.Atoi(c.Query("page", "1"))
+	//pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
 	
 	// 创建分页请求
-	req := query.NewPageRequest(page, pageSize)
-	req.OrderBy = c.Query("orderBy", "id")
-	req.Order = c.Query("order", "DESC")
+	req := ctx.GetPagination(c)
+	//req.OrderBy = c.Query("orderBy", "id")
+	//req.Order = c.Query("order", "DESC")
 	
 	// 创建查询构建器
 	queryBuilder := query.NewMySQLQueryFactory(nil).NewQuery()
