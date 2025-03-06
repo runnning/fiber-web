@@ -52,12 +52,12 @@ func (uc *{{.VarName}}UseCase) List(ctx context.Context, req *query.PageRequest)
 	// 处理查询参数和业务逻辑
 	
 	// 参数验证
-	if req.Page <= 0 {
-		req.Page = 1
-	}
-	if req.PageSize <= 0 || req.PageSize > 100 {
-		req.PageSize = 10 // 限制最大页面大小
-	}
+	// if req.Page <= 0 {
+	// 	req.Page = 1
+	// }
+	// if req.PageSize <= 0 || req.PageSize > 100 {
+	// 	req.PageSize = 10 // 限制最大页面大小
+	// }
 	
 	// 设置默认排序
 	if req.OrderBy == "" {
