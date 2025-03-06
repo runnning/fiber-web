@@ -904,23 +904,24 @@ func (q *MySQLQuery) UnionAll(other QueryBuilder) QueryBuilder {
 	return q
 }
 
-// Build 实现QueryBuilder接口
+// Build 构建查询
 func (q *MySQLQuery) Build() interface{} {
-	return q.buildQuery()
-}
+	// 创建新的会话以避免影响原始查询
+	query := q.db.Session(&gorm.Session{})
 
-// buildQuery 构建查询
-func (q *MySQLQuery) buildQuery() *gorm.DB {
-	query := q.db
+	// 应用查询条件
+	for _, condition := range q.conditions {
+		query = q.applyCondition(query, condition)
+	}
 
-	// 添加字段选择
+	// 应用查询字段
 	if len(q.fields) > 0 {
 		query = query.Select(q.fields)
 	}
 
-	// 添加连接
+	// 应用连接
 	for _, join := range q.joins {
-		joinStr := fmt.Sprintf("%s %s ON %s", join.Type, join.Table, join.Condition)
+		joinStr := string(join.Type) + " JOIN " + join.Table + " ON " + join.Condition
 		if len(join.Args) > 0 {
 			query = query.Joins(joinStr, join.Args...)
 		} else {
@@ -928,162 +929,110 @@ func (q *MySQLQuery) buildQuery() *gorm.DB {
 		}
 	}
 
-	// 添加条件
-	query = q.buildConditions(query)
-
-	// 添加子查询
-	for _, subQuery := range q.subQueries {
-		query = query.Where(subQuery.Build())
-	}
-
-	// 添加排序
-	for _, order := range q.orders {
-		query = query.Order(order)
-	}
-
-	// 添加分组
+	// 应用分组
 	if len(q.groupBy) > 0 {
 		query = query.Group(strings.Join(q.groupBy, ", "))
-
-		// 添加分组条件
-		if len(q.having) > 0 {
-			query = q.buildHavingConditions(query)
-		}
 	}
 
-	// 添加限制和偏移
-	if q.limit > 0 {
-		query = query.Limit(q.limit)
-	}
-
-	if q.offset > 0 {
-		query = query.Offset(q.offset)
+	// 应用分组条件
+	if len(q.having) > 0 {
+		query = q.buildHavingConditions(query)
 	}
 
 	return query
 }
 
-// buildConditions 构建所有条件
-func (q *MySQLQuery) buildConditions(query *gorm.DB) *gorm.DB {
-	for _, condition := range q.conditions {
-		query = q.buildCondition(query, condition)
-	}
-	return query
-}
-
-// buildCondition 构建单个条件
-func (q *MySQLQuery) buildCondition(query *gorm.DB, condition Condition) *gorm.DB {
+// applyCondition 应用查询条件
+func (q *MySQLQuery) applyCondition(query *gorm.DB, condition Condition) *gorm.DB {
 	if condition == nil {
 		return query
 	}
 
-	switch condition.GetType() {
-	case ConditionTypeSimple:
-		return q.buildSimpleCondition(query, condition.(*SimpleCondition))
-	case ConditionTypeGroup:
-		return q.buildGroupCondition(query, condition.(*GroupCondition))
-	case ConditionTypeRaw:
-		return q.buildRawCondition(query, condition.(*RawCondition))
+	switch c := condition.(type) {
+	case *SimpleCondition:
+		return q.applySimpleCondition(query, c)
+	case *GroupCondition:
+		return q.applyGroupCondition(query, c)
+	case *RawCondition:
+		if raw, ok := c.Raw.(string); ok {
+			return query.Where(raw)
+		}
+		return query
 	default:
 		return query
 	}
 }
 
-// buildSimpleCondition 构建简单条件
-func (q *MySQLQuery) buildSimpleCondition(query *gorm.DB, condition *SimpleCondition) *gorm.DB {
-	field := condition.Field
-	value := condition.Value
-
+// applySimpleCondition 应用简单条件
+func (q *MySQLQuery) applySimpleCondition(query *gorm.DB, condition *SimpleCondition) *gorm.DB {
 	switch condition.Operator {
 	case OpEq:
-		return query.Where(fmt.Sprintf("%s = ?", field), value)
+		return query.Where(condition.Field+" = ?", condition.Value)
 	case OpNe:
-		return query.Where(fmt.Sprintf("%s != ?", field), value)
+		return query.Where(condition.Field+" <> ?", condition.Value)
 	case OpGt:
-		return query.Where(fmt.Sprintf("%s > ?", field), value)
+		return query.Where(condition.Field+" > ?", condition.Value)
 	case OpGte:
-		return query.Where(fmt.Sprintf("%s >= ?", field), value)
+		return query.Where(condition.Field+" >= ?", condition.Value)
 	case OpLt:
-		return query.Where(fmt.Sprintf("%s < ?", field), value)
+		return query.Where(condition.Field+" < ?", condition.Value)
 	case OpLte:
-		return query.Where(fmt.Sprintf("%s <= ?", field), value)
-	case OpIn:
-		return query.Where(fmt.Sprintf("%s IN ?", field), value)
-	case OpNin:
-		return query.Where(fmt.Sprintf("%s NOT IN ?", field), value)
+		return query.Where(condition.Field+" <= ?", condition.Value)
 	case OpContains:
-		if strVal, ok := value.(string); ok {
-			return query.Where(fmt.Sprintf("%s LIKE ?", field), "%"+strVal+"%")
+		if strVal, ok := condition.Value.(string); ok {
+			return query.Where(condition.Field+" LIKE ?", "%"+strVal+"%")
 		}
 	case OpStartsWith:
-		if strVal, ok := value.(string); ok {
-			return query.Where(fmt.Sprintf("%s LIKE ?", field), strVal+"%")
+		if strVal, ok := condition.Value.(string); ok {
+			return query.Where(condition.Field+" LIKE ?", strVal+"%")
 		}
 	case OpEndsWith:
-		if strVal, ok := value.(string); ok {
-			return query.Where(fmt.Sprintf("%s LIKE ?", field), "%"+strVal)
+		if strVal, ok := condition.Value.(string); ok {
+			return query.Where(condition.Field+" LIKE ?", "%"+strVal)
 		}
+	case OpIn:
+		return query.Where(condition.Field+" IN ?", condition.Value)
+	case OpNin:
+		return query.Where(condition.Field+" NOT IN ?", condition.Value)
 	case OpExists:
-		if boolVal, ok := value.(bool); ok {
+		if boolVal, ok := condition.Value.(bool); ok {
 			if boolVal {
-				return query.Where(fmt.Sprintf("%s IS NOT NULL", field))
+				return query.Where(condition.Field + " IS NOT NULL")
 			} else {
-				return query.Where(fmt.Sprintf("%s IS NULL", field))
+				return query.Where(condition.Field + " IS NULL")
 			}
 		}
-	case OpBetween:
-		if values, ok := value.([]interface{}); ok && len(values) == 2 {
-			return query.Where(fmt.Sprintf("%s BETWEEN ? AND ?", field), values[0], values[1])
-		}
-	case OpIsNull:
-		return query.Where(fmt.Sprintf("%s IS NULL", field))
-	case OpNotNull:
-		return query.Where(fmt.Sprintf("%s IS NOT NULL", field))
+	default:
+		return query
 	}
-
 	return query
 }
 
-// buildGroupCondition 构建条件组
-func (q *MySQLQuery) buildGroupCondition(query *gorm.DB, condition *GroupCondition) *gorm.DB {
+// applyGroupCondition 应用条件组
+func (q *MySQLQuery) applyGroupCondition(query *gorm.DB, condition *GroupCondition) *gorm.DB {
 	if len(condition.Conditions) == 0 {
 		return query
 	}
 
-	switch condition.Logic {
-	case LogicAnd:
-		// 对于AND条件，直接链式调用where即可
-		for _, subCondition := range condition.Conditions {
-			query = q.buildCondition(query, subCondition)
-		}
-		return query
-	case LogicOr:
-		// 对于OR条件，需要使用Or方法
-		return query.Where(func(db *gorm.DB) *gorm.DB {
-			for i, subCondition := range condition.Conditions {
-				if i == 0 {
-					db = q.buildCondition(db, subCondition)
-				} else {
+	return query.Where(func(db *gorm.DB) *gorm.DB {
+		for i, c := range condition.Conditions {
+			if i == 0 {
+				db = q.applyCondition(db, c)
+			} else {
+				switch condition.Logic {
+				case LogicAnd:
+					db = db.Where(func(subDb *gorm.DB) *gorm.DB {
+						return q.applyCondition(subDb, c)
+					})
+				case LogicOr:
 					db = db.Or(func(subDb *gorm.DB) *gorm.DB {
-						return q.buildCondition(subDb, subCondition)
+						return q.applyCondition(subDb, c)
 					})
 				}
 			}
-			return db
-		})
-	default:
-		return query
-	}
-}
-
-// buildRawCondition 构建原始条件
-func (q *MySQLQuery) buildRawCondition(query *gorm.DB, condition *RawCondition) *gorm.DB {
-	if condition.Raw != nil {
-		if db, ok := condition.Raw.(*gorm.DB); ok {
-			return db
 		}
-	}
-	return query
+		return db
+	})
 }
 
 // buildHavingConditions 构建所有Having条件

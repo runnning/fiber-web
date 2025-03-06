@@ -160,7 +160,18 @@ func (p *MySQLProvider[T]) Count(ctx context.Context, query interface{}) (int64,
 		return 0, err
 	}
 
-	err = db.WithContext(ctx).Count(&total).Error
+	// 创建新的会话以避免影响原始查询
+	db = db.Session(&gorm.Session{})
+
+	// 确保设置了正确的表
+	var model T
+	db = db.Model(&model)
+
+	// 应用上下文
+	db = db.WithContext(ctx)
+
+	// 执行查询
+	err = db.Count(&total).Error
 	return total, err
 }
 
@@ -170,6 +181,13 @@ func (p *MySQLProvider[T]) Find(ctx context.Context, query interface{}, req *Pag
 	if err != nil {
 		return err
 	}
+
+	// 创建新的会话以避免影响原始查询
+	db = db.Session(&gorm.Session{})
+
+	// 确保设置了正确的表
+	var model T
+	db = db.Model(&model)
 
 	// 添加上下文
 	db = db.WithContext(ctx)
@@ -225,7 +243,7 @@ func (p *MySQLProvider[T]) Delete(ctx context.Context, query interface{}) error 
 
 // Transaction 事务操作
 func (p *MySQLProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
-	return p.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return p.DB.Transaction(func(tx *gorm.DB) error {
 		// 创建事务上下文
 		txCtx := context.WithValue(ctx, "tx", tx)
 		return fn(txCtx)

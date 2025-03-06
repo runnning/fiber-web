@@ -183,6 +183,13 @@ type QueryFactory interface {
 
 // Paginate 通用分页查询函数
 func Paginate[T any](ctx context.Context, builder QueryBuilder, provider DataProvider[T], req *PageRequest, result *[]T) (*PageResponse[T], error) {
+	// 计算总记录数（不应用分页参数）
+	countQuery := builder.Build()
+	total, err := provider.Count(ctx, countQuery)
+	if err != nil {
+		return nil, err
+	}
+
 	// 应用分页参数
 	if req.OrderBy != "" {
 		builder.OrderBy(req.OrderBy, req.Order)
@@ -193,12 +200,6 @@ func Paginate[T any](ctx context.Context, builder QueryBuilder, provider DataPro
 
 	// 构建查询
 	query := builder.Build()
-
-	// 计算总记录数
-	total, err := provider.Count(ctx, query)
-	if err != nil {
-		return nil, err
-	}
 
 	// 查询数据列表
 	if err := provider.Find(ctx, query, req, result); err != nil {

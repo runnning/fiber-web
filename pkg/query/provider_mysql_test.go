@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ func TestMySQLPaginate(t *testing.T) {
 		buildQuery func(*gorm.DB) QueryBuilder
 		req        *PageRequest
 		wantTotal  int64
+		wantCount  int
 		wantErr    bool
 	}{
 		{
@@ -47,13 +49,18 @@ func TestMySQLPaginate(t *testing.T) {
 				Order:    "DESC",
 			},
 			wantTotal: 3,
+			wantCount: 2,
 			wantErr:   false,
 		},
 		{
 			name: "带条件的查询",
 			setup: func(db *gorm.DB) error {
-				// 使用上一个测试的数据
-				return nil
+				users := []User{
+					{Name: "User1", Email: "user1@example.com", Age: 20, Status: "active"},
+					{Name: "User2", Email: "user2@example.com", Age: 25, Status: "active"},
+					{Name: "User3", Email: "user3@example.com", Age: 30, Status: "inactive"},
+				}
+				return db.Create(&users).Error
 			},
 			buildQuery: func(db *gorm.DB) QueryBuilder {
 				query := NewMySQLQuery(db.Model(&User{}))
@@ -67,12 +74,13 @@ func TestMySQLPaginate(t *testing.T) {
 				Order:    "ASC",
 			},
 			wantTotal: 2,
+			wantCount: 2,
 			wantErr:   false,
 		},
 		{
 			name: "空结果",
 			setup: func(db *gorm.DB) error {
-				return db.Exec("DELETE FROM users").Error
+				return nil
 			},
 			buildQuery: func(db *gorm.DB) QueryBuilder {
 				return NewMySQLQuery(db.Model(&User{}))
@@ -82,6 +90,7 @@ func TestMySQLPaginate(t *testing.T) {
 				PageSize: 10,
 			},
 			wantTotal: 0,
+			wantCount: 0,
 			wantErr:   false,
 		},
 	}
@@ -94,6 +103,11 @@ func TestMySQLPaginate(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				// 清理之前的测试数据
+				if err := db.Exec("DELETE FROM user").Error; err != nil {
+					t.Fatalf("Failed to cleanup previous test data: %v", err)
+				}
+
 				// 准备测试数据
 				if tt.setup != nil {
 					if err := tt.setup(db); err != nil {
@@ -118,6 +132,10 @@ func TestMySQLPaginate(t *testing.T) {
 						t.Errorf("Paginate() total = %v, want %v", resp.Total, tt.wantTotal)
 					}
 
+					if len(users) != tt.wantCount {
+						t.Errorf("Paginate() result count = %v, want %v", len(users), tt.wantCount)
+					}
+
 					if resp.Page != tt.req.Page {
 						t.Errorf("Paginate() page = %v, want %v", resp.Page, tt.req.Page)
 					}
@@ -125,15 +143,6 @@ func TestMySQLPaginate(t *testing.T) {
 					if resp.PageSize != tt.req.PageSize {
 						t.Errorf("Paginate() pageSize = %v, want %v", resp.PageSize, tt.req.PageSize)
 					}
-
-					if len(resp.List) == 0 && tt.wantTotal > 0 {
-						t.Error("Paginate() expected non-empty result")
-					}
-				}
-
-				// 清理测试数据
-				if err := db.Exec("DELETE FROM users").Error; err != nil {
-					t.Errorf("Failed to cleanup test data: %v", err)
 				}
 			})
 		}
@@ -232,4 +241,357 @@ func TestPageRequest_Offset(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMySQLProvider_FindOne(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*gorm.DB) error
+		query   func(*gorm.DB) *gorm.DB
+		wantErr bool
+	}{
+		{
+			name: "查找存在的记录",
+			setup: func(db *gorm.DB) error {
+				user := User{Name: "TestUser", Email: "test@example.com", Age: 25, Status: "active"}
+				return db.Create(&user).Error
+			},
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("name = ?", "TestUser")
+			},
+			wantErr: false,
+		},
+		{
+			name: "查找不存在的记录",
+			setup: func(db *gorm.DB) error {
+				return nil
+			},
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("name = ?", "NonExistentUser")
+			},
+			wantErr: true,
+		},
+	}
+
+	WithTestDB(t, func(db *gorm.DB) {
+		if err := db.AutoMigrate(&User{}); err != nil {
+			t.Fatalf("Failed to create test table: %v", err)
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if err := db.Exec("DELETE FROM user").Error; err != nil {
+					t.Fatalf("Failed to cleanup test data: %v", err)
+				}
+
+				if tt.setup != nil {
+					if err := tt.setup(db); err != nil {
+						t.Fatalf("Failed to setup test data: %v", err)
+					}
+				}
+
+				provider := NewMySQLProvider[User](db)
+				var result User
+				err := provider.FindOne(context.Background(), tt.query(db), &result)
+
+				if (err != nil) != tt.wantErr {
+					t.Errorf("FindOne() error = %v, wantErr %v", err, tt.wantErr)
+				}
+
+				if err == nil && result.Name != "TestUser" {
+					t.Errorf("FindOne() got = %v, want %v", result.Name, "TestUser")
+				}
+			})
+		}
+	})
+}
+
+func TestMySQLProvider_Insert(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    *User
+		wantErr bool
+	}{
+		{
+			name: "插入有效记录",
+			data: &User{
+				Name:   "NewUser",
+				Email:  "new@example.com",
+				Age:    30,
+				Status: "active",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "插入空记录",
+			data:    &User{},
+			wantErr: false,
+		},
+	}
+
+	WithTestDB(t, func(db *gorm.DB) {
+		if err := db.AutoMigrate(&User{}); err != nil {
+			t.Fatalf("Failed to create test table: %v", err)
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if err := db.Exec("DELETE FROM user").Error; err != nil {
+					t.Fatalf("Failed to cleanup test data: %v", err)
+				}
+
+				provider := NewMySQLProvider[User](db)
+				err := provider.Insert(context.Background(), tt.data)
+
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Insert() error = %v, wantErr %v", err, tt.wantErr)
+				}
+
+				if err == nil {
+					var result User
+					if err := db.First(&result, tt.data.ID).Error; err != nil {
+						t.Errorf("Failed to verify inserted record: %v", err)
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestMySQLProvider_Update(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*gorm.DB) error
+		query   func(*gorm.DB) *gorm.DB
+		updates map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "更新存在的记录",
+			setup: func(db *gorm.DB) error {
+				user := User{Name: "OldName", Email: "old@example.com", Age: 25, Status: "active"}
+				return db.Create(&user).Error
+			},
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Model(&User{}).Where("name = ?", "OldName")
+			},
+			updates: map[string]interface{}{
+				"name":  "NewName",
+				"email": "new@example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "更新不存在的记录",
+			setup: func(db *gorm.DB) error {
+				return nil
+			},
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Model(&User{}).Where("name = ?", "NonExistent")
+			},
+			updates: map[string]interface{}{
+				"name": "NewName",
+			},
+			wantErr: false,
+		},
+	}
+
+	WithTestDB(t, func(db *gorm.DB) {
+		if err := db.AutoMigrate(&User{}); err != nil {
+			t.Fatalf("Failed to create test table: %v", err)
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if err := db.Exec("DELETE FROM user").Error; err != nil {
+					t.Fatalf("Failed to cleanup test data: %v", err)
+				}
+
+				if tt.setup != nil {
+					if err := tt.setup(db); err != nil {
+						t.Fatalf("Failed to setup test data: %v", err)
+					}
+				}
+
+				provider := NewMySQLProvider[User](db)
+				err := provider.Update(context.Background(), tt.query(db), tt.updates)
+
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Update() error = %v, wantErr %v", err, tt.wantErr)
+				}
+
+				if err == nil && tt.name == "更新存在的记录" {
+					var result User
+					if err := db.Where("name = ?", "NewName").First(&result).Error; err != nil {
+						t.Errorf("Failed to verify updated record: %v", err)
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestMySQLProvider_Delete(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*gorm.DB) error
+		query   func(*gorm.DB) *gorm.DB
+		wantErr bool
+	}{
+		{
+			name: "删除存在的记录",
+			setup: func(db *gorm.DB) error {
+				user := User{Name: "ToDelete", Email: "delete@example.com", Age: 25, Status: "active"}
+				return db.Create(&user).Error
+			},
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("name = ?", "ToDelete")
+			},
+			wantErr: false,
+		},
+		{
+			name: "删除不存在的记录",
+			setup: func(db *gorm.DB) error {
+				return nil
+			},
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("name = ?", "NonExistent")
+			},
+			wantErr: false,
+		},
+	}
+
+	WithTestDB(t, func(db *gorm.DB) {
+		if err := db.AutoMigrate(&User{}); err != nil {
+			t.Fatalf("Failed to create test table: %v", err)
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if err := db.Exec("DELETE FROM user").Error; err != nil {
+					t.Fatalf("Failed to cleanup test data: %v", err)
+				}
+
+				if tt.setup != nil {
+					if err := tt.setup(db); err != nil {
+						t.Fatalf("Failed to setup test data: %v", err)
+					}
+				}
+
+				provider := NewMySQLProvider[User](db)
+				err := provider.Delete(context.Background(), tt.query(db))
+
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
+				}
+
+				if err == nil && tt.name == "删除存在的记录" {
+					var count int64
+					if err := db.Model(&User{}).Where("name = ?", "ToDelete").Count(&count).Error; err != nil {
+						t.Errorf("Failed to verify deleted record: %v", err)
+					}
+					if count != 0 {
+						t.Errorf("Record was not deleted")
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestMySQLProvider_Transaction(t *testing.T) {
+	tests := []struct {
+		name    string
+		fn      func(context.Context) error
+		wantErr bool
+	}{
+		{
+			name: "成功的事务",
+			fn: func(ctx context.Context) error {
+				db := ctx.Value("tx").(*gorm.DB)
+				user := &User{Name: "TransactionUser", Email: "tx@example.com", Age: 25, Status: "active"}
+				if err := db.Create(user).Error; err != nil {
+					return err
+				}
+				return nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "失败的事务",
+			fn: func(ctx context.Context) error {
+				return errors.New("transaction error")
+			},
+			wantErr: true,
+		},
+	}
+
+	WithTestDB(t, func(db *gorm.DB) {
+		if err := db.AutoMigrate(&User{}); err != nil {
+			t.Fatalf("Failed to create test table: %v", err)
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// 清理之前的测试数据
+				if err := db.Exec("DELETE FROM user").Error; err != nil {
+					t.Fatalf("Failed to cleanup test data: %v", err)
+				}
+
+				provider := NewMySQLProvider[User](db)
+				err := provider.Transaction(context.Background(), tt.fn)
+
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Transaction() error = %v, wantErr %v", err, tt.wantErr)
+				}
+
+				if err == nil && tt.name == "成功的事务" {
+					var user User
+					if err := db.Where("name = ?", "TransactionUser").First(&user).Error; err != nil {
+						t.Errorf("Failed to verify transaction: %v", err)
+					}
+					if user.Name != "TransactionUser" {
+						t.Errorf("Transaction was not committed, user not found")
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestMySQLProvider_parseQuery(t *testing.T) {
+	WithTestDB(t, func(db *gorm.DB) {
+		provider := NewMySQLProvider[User](db)
+
+		tests := []struct {
+			name    string
+			query   interface{}
+			wantErr bool
+		}{
+			{
+				name:    "nil查询",
+				query:   nil,
+				wantErr: false,
+			},
+			{
+				name:    "gorm.DB查询",
+				query:   db.Where("name = ?", "test"),
+				wantErr: false,
+			},
+			{
+				name:    "不支持的查询类型",
+				query:   "invalid",
+				wantErr: true,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := provider.parseQuery(tt.query)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("parseQuery() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			})
+		}
+	})
 }
