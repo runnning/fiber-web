@@ -158,14 +158,32 @@ func (h *UserHandler) TestUser(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
+	// 获取分页参数
 	req := ctx.GetPagination(c)
 
 	// 添加过滤条件
-	req.AddFilter("status", "1")
-	req.AddFilter("search", c.Query("search"))
-	req.AddFilter("start_time", c.Query("start_time"))
-	req.AddFilter("end_time", c.Query("end_time"))
+	if status := c.Query("status"); status != "" {
+		req.AddFilter("status", status)
+	}
 
+	if role := c.Query("role"); role != "" {
+		req.AddFilter("role", role)
+	}
+
+	if search := c.Query("search"); search != "" {
+		req.AddFilter("search", search)
+	}
+
+	// 添加时间范围过滤
+	if startTime := c.Query("start_time"); startTime != "" {
+		req.AddFilter("start_time", startTime)
+	}
+
+	if endTime := c.Query("end_time"); endTime != "" {
+		req.AddFilter("end_time", endTime)
+	}
+
+	// 调用业务逻辑层
 	result, err := h.userUseCase.List(c.Context(), req)
 	if err != nil {
 		return response.ServerError(c, err)

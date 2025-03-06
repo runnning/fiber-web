@@ -50,16 +50,37 @@ func (r *{{.VarName}}Repository) Delete(ctx context.Context, id uint) error {
 
 func (r *{{.VarName}}Repository) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error) {
 	var {{.VarName}}s []entity.{{.Name}}
-	builder := query.NewMySQLQueryBuilder(r.db.WithContext(ctx).Model(&entity.{{.Name}}{}))
-
-	// 添加查询条件
+	db := r.db.WithContext(ctx).Model(&entity.{{.Name}}{})
+	
+	// 处理搜索条件
 	if search := req.GetFilter("search"); search != "" {
-		builder.Like("name", search)
+		db = query.BuildSearchQuery(db, search, []string{"name"})
 	}
-	if startTime := req.GetFilter("start_time"); startTime != "" {
-		builder.Between("created_at", startTime, req.GetFilter("end_time"))
+	
+	// 处理状态过滤
+	if status := req.GetFilter("status"); status != "" {
+		db = db.Where("status = ?", status)
 	}
-
-	return query.MySQLPaginate[entity.{{.Name}}](builder, req, &{{.VarName}}s)
+	
+	// 处理时间范围
+	startTime := req.GetFilter("start_time")
+	endTime := req.GetFilter("end_time")
+	if startTime != "" || endTime != "" {
+		db = query.BuildTimeRangeQuery(db, "created_at", startTime, endTime)
+	}
+	
+	// 构建查询
+	builder := query.NewMySQLQuery(db)
+	
+	// 添加其他条件
+	if category := req.GetFilter("category"); category != "" {
+		builder.AddCondition("category", query.OpEq, category)
+	}
+	
+	// 创建数据提供者
+	provider := query.NewMySQLProvider[entity.{{.Name}}](r.db)
+	
+	// 执行分页查询
+	return query.Paginate(ctx, builder, provider, req, &{{.VarName}}s)
 }
 `

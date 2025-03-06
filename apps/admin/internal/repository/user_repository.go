@@ -59,15 +59,36 @@ func (r *userRepository) Delete(ctx context.Context, id uint) error {
 
 func (r *userRepository) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.User], error) {
 	var users []entity.User
-	builder := query.NewMySQLQueryBuilder(r.db.WithContext(ctx).Model(&entity.User{}))
+	db := r.db.WithContext(ctx).Model(&entity.User{})
 
-	// 添加查询条件
+	// 处理搜索条件
 	if search := req.GetFilter("search"); search != "" {
-		builder.Like("name", search).Like("email", search)
+		db = query.BuildSearchQuery(db, search, []string{"name", "email"})
 	}
-	builder.Equal("status", req.GetFilter("status"))
-	builder.Equal("role", req.GetFilter("role"))
-	builder.Between("created_at", req.GetFilter("start_time"), req.GetFilter("end_time"))
 
-	return query.MySQLPaginate(builder, req, &users)
+	// 处理状态过滤
+	if status := req.GetFilter("status"); status != "" {
+		db = db.Where("status = ?", status)
+	}
+
+	// 处理时间范围
+	startTime := req.GetFilter("start_time")
+	endTime := req.GetFilter("end_time")
+	if startTime != "" || endTime != "" {
+		db = query.BuildTimeRangeQuery(db, "created_at", startTime, endTime)
+	}
+
+	// 构建查询
+	builder := query.NewMySQLQuery(db)
+
+	// 添加其他条件
+	if role := req.GetFilter("role"); role != "" {
+		builder.AddCondition("role", query.OpEq, role)
+	}
+
+	// 创建数据提供者
+	provider := query.NewMySQLProvider[entity.User](r.db)
+
+	// 执行分页查询
+	return query.Paginate(ctx, builder, provider, req, &users)
 }

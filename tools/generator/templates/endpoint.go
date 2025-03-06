@@ -95,18 +95,37 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 }
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
+	// 获取分页参数
 	req := ctx.GetPagination(c)
-
-	// 添加查询条件
-	req.AddFilter("search", c.Query("search"))
-	req.AddFilter("start_time", c.Query("start_time"))
-	req.AddFilter("end_time", c.Query("end_time"))
-
+	
+	// 添加过滤条件
+	if status := c.Query("status"); status != "" {
+		req.AddFilter("status", status)
+	}
+	
+	if category := c.Query("category"); category != "" {
+		req.AddFilter("category", category)
+	}
+	
+	if search := c.Query("search"); search != "" {
+		req.AddFilter("search", search)
+	}
+	
+	// 添加时间范围过滤
+	if startTime := c.Query("start_time"); startTime != "" {
+		req.AddFilter("start_time", startTime)
+	}
+	
+	if endTime := c.Query("end_time"); endTime != "" {
+		req.AddFilter("end_time", endTime)
+	}
+	
+	// 调用业务逻辑层
 	result, err := h.{{.VarName}}UseCase.List(c.Context(), req)
 	if err != nil {
 		return response.ServerError(c, err)
 	}
-
+	
 	return response.Success(c, result)
 }
 `

@@ -4,6 +4,8 @@ var UseCaseTemplate = `package usecase
 
 import (
 	"context"
+	"fmt"
+	"time"
 	"{{.ModuleName}}/internal/entity"
 	"{{.ModuleName}}/internal/repository"
 	"{{.ModuleName}}/pkg/query"
@@ -47,6 +49,57 @@ func (uc *{{.VarName}}UseCase) Delete{{.Name}}(ctx context.Context, id uint) err
 }
 
 func (uc *{{.VarName}}UseCase) List(ctx context.Context, req *query.PageRequest) (*query.PageResponse[entity.{{.Name}}], error) {
-	return uc.{{.VarName}}Repo.List(ctx, req)
+	// 处理查询参数和业务逻辑
+	
+	// 参数验证
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 || req.PageSize > 100 {
+		req.PageSize = 10 // 限制最大页面大小
+	}
+	
+	// 设置默认排序
+	if req.OrderBy == "" {
+		req.OrderBy = "id"
+		req.Order = "DESC"
+	}
+	
+	// 处理业务相关的过滤条件
+	if status := req.GetFilter("status"); status != "" {
+		// 验证状态值是否有效
+		validStatus := map[string]bool{"0": true, "1": true, "2": true}
+		if !validStatus[status] {
+			return nil, fmt.Errorf("无效的状态值: %s", status)
+		}
+	}
+	
+	// 处理时间范围
+	startTime := req.GetFilter("start_time")
+	endTime := req.GetFilter("end_time")
+	if startTime != "" || endTime != "" {
+		// 验证时间格式
+		if startTime != "" {
+			if _, err := time.Parse("2006-01-02", startTime); err != nil {
+				return nil, fmt.Errorf("开始时间格式错误: %s", startTime)
+			}
+		}
+		if endTime != "" {
+			if _, err := time.Parse("2006-01-02", endTime); err != nil {
+				return nil, fmt.Errorf("结束时间格式错误: %s", endTime)
+			}
+		}
+	}
+	
+	// 调用仓库层执行查询
+	result, err := uc.{{.VarName}}Repo.List(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 对结果进行后处理
+	// 例如：敏感信息过滤、数据转换等
+	
+	return result, nil
 }
 `

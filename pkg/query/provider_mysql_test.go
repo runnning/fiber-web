@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -74,29 +75,32 @@ func TestMySQLPaginate(t *testing.T) {
 				}
 
 				var users []User
-				query := NewMySQLQueryBuilder(db.Model(&User{}))
-				resp, err := MySQLPaginate[User](query, tt.req, &users)
+				query := NewMySQLQuery(db.Model(&User{}))
+				provider := NewMySQLProvider[User](db)
+
+				ctx := context.Background()
+				resp, err := Paginate(ctx, query, provider, tt.req, &users)
 
 				if (err != nil) != tt.wantErr {
-					t.Errorf("MySQLPaginate() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("Paginate() error = %v, wantErr %v", err, tt.wantErr)
 					return
 				}
 
 				if err == nil {
 					if resp.Total != tt.wantTotal {
-						t.Errorf("MySQLPaginate() total = %v, want %v", resp.Total, tt.wantTotal)
+						t.Errorf("Paginate() total = %v, want %v", resp.Total, tt.wantTotal)
 					}
 
 					if resp.Page != tt.req.Page {
-						t.Errorf("MySQLPaginate() page = %v, want %v", resp.Page, tt.req.Page)
+						t.Errorf("Paginate() page = %v, want %v", resp.Page, tt.req.Page)
 					}
 
 					if resp.PageSize != tt.req.PageSize {
-						t.Errorf("MySQLPaginate() pageSize = %v, want %v", resp.PageSize, tt.req.PageSize)
+						t.Errorf("Paginate() pageSize = %v, want %v", resp.PageSize, tt.req.PageSize)
 					}
 
 					if len(resp.List) == 0 && tt.wantTotal > 0 {
-						t.Error("MySQLPaginate() expected non-empty result")
+						t.Error("Paginate() expected non-empty result")
 					}
 				}
 

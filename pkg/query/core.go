@@ -1,5 +1,11 @@
 package query
 
+import (
+	"context"
+)
+
+// ===== 分页相关 =====
+
 // PageRequest 分页请求
 type PageRequest struct {
 	Page     int               `json:"page" query:"page"`         // 页码
@@ -56,4 +62,39 @@ func NewPageResponse[T any](list []T, total int64, page, pageSize int) *PageResp
 		Page:     page,
 		PageSize: pageSize,
 	}
+}
+
+// ===== 查询接口 =====
+
+// QueryBuilder 通用查询构建器接口
+type QueryBuilder interface {
+	// Build 构建查询条件
+	Build() interface{}
+}
+
+// DataProvider 数据提供者接口
+type DataProvider[T any] interface {
+	// Count 计算符合条件的记录总数
+	Count(ctx context.Context, query interface{}) (int64, error)
+
+	// Find 查询数据列表
+	Find(ctx context.Context, query interface{}, req *PageRequest, result *[]T) error
+}
+
+// Paginate 通用分页查询函数
+func Paginate[T any](ctx context.Context, builder QueryBuilder, provider DataProvider[T], req *PageRequest, result *[]T) (*PageResponse[T], error) {
+	query := builder.Build()
+
+	// 计算总记录数
+	total, err := provider.Count(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	// 查询数据列表
+	if err := provider.Find(ctx, query, req, result); err != nil {
+		return nil, err
+	}
+
+	return NewPageResponse(*result, total, req.Page, req.PageSize), nil
 }

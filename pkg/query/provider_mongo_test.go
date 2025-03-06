@@ -94,28 +94,30 @@ func TestMongoPaginate(t *testing.T) {
 
 				var users []MongoUser
 				query := NewMongoQuery()
-				resp, err := MongoPaginate[MongoUser](ctx, coll, query, tt.req, &users)
+				provider := NewMongoProvider[MongoUser](coll)
+
+				resp, err := Paginate(ctx, query, provider, tt.req, &users)
 
 				if (err != nil) != tt.wantErr {
-					t.Errorf("MongoPaginate() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("Paginate() error = %v, wantErr %v", err, tt.wantErr)
 					return
 				}
 
 				if err == nil {
 					if resp.Total != tt.wantTotal {
-						t.Errorf("MongoPaginate() total = %v, want %v", resp.Total, tt.wantTotal)
+						t.Errorf("Paginate() total = %v, want %v", resp.Total, tt.wantTotal)
 					}
 
 					if resp.Page != tt.req.Page {
-						t.Errorf("MongoPaginate() page = %v, want %v", resp.Page, tt.req.Page)
+						t.Errorf("Paginate() page = %v, want %v", resp.Page, tt.req.Page)
 					}
 
 					if resp.PageSize != tt.req.PageSize {
-						t.Errorf("MongoPaginate() pageSize = %v, want %v", resp.PageSize, tt.req.PageSize)
+						t.Errorf("Paginate() pageSize = %v, want %v", resp.PageSize, tt.req.PageSize)
 					}
 
 					if len(resp.List) == 0 && tt.wantTotal > 0 {
-						t.Error("MongoPaginate() expected non-empty result")
+						t.Error("Paginate() expected non-empty result")
 					}
 				}
 			})
@@ -251,20 +253,20 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 				wantCount: 3,
 			},
 			{
-				name:      "部分时间范围",
-				start:     &now,
-				end:       &tomorrow,
-				wantCount: 2,
-			},
-			{
-				name:      "仅开始时间",
+				name:      "只有开始时间",
 				start:     &now,
 				end:       nil,
 				wantCount: 2,
 			},
 			{
-				name:      "仅结束时间",
+				name:      "只有结束时间",
 				start:     nil,
+				end:       &now,
+				wantCount: 2,
+			},
+			{
+				name:      "精确时间范围",
+				start:     &yesterday,
 				end:       &now,
 				wantCount: 2,
 			},
@@ -272,15 +274,11 @@ func TestMongoTimeRangeQuery(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				// 使用修复后的FilterBuilder和ParseTimeRange函数
 				conditions := ParseTimeRange("created_at", tt.start, tt.end)
 				filter := NewFilterBuilder()
 				for _, condition := range conditions {
 					filter.AddCondition(condition.Field, condition.Operator, condition.Value)
 				}
-
-				// 打印查询条件，帮助调试
-				t.Logf("查询条件: %+v", filter.Build())
 
 				count, err := coll.CountDocuments(ctx, filter.Build())
 				if err != nil {

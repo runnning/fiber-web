@@ -4,8 +4,68 @@ import (
 	"fmt"
 	"strings"
 
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"gorm.io/gorm"
 )
+
+// ===== MongoDB查询构建器 =====
+
+// MongoQuery MongoDB查询结构
+type MongoQuery struct {
+	Filter     bson.M             // 过滤条件
+	Projection bson.M             // 字段投影
+	Collation  *options.Collation // 排序规则
+}
+
+// NewMongoQuery 创建新的MongoDB查询
+func NewMongoQuery() *MongoQuery {
+	return &MongoQuery{
+		Filter:     bson.M{},
+		Projection: bson.M{},
+	}
+}
+
+// SetFilter 设置过滤条件
+func (q *MongoQuery) SetFilter(filter bson.M) *MongoQuery {
+	q.Filter = filter
+	return q
+}
+
+// AddFilter 添加过滤条件
+func (q *MongoQuery) AddFilter(key string, value interface{}) *MongoQuery {
+	q.Filter[key] = value
+	return q
+}
+
+// SetProjection 设置字段投影
+func (q *MongoQuery) SetProjection(fields ...string) *MongoQuery {
+	for _, field := range fields {
+		q.Projection[field] = 1
+	}
+	return q
+}
+
+// ExcludeFields 排除字段
+func (q *MongoQuery) ExcludeFields(fields ...string) *MongoQuery {
+	for _, field := range fields {
+		q.Projection[field] = 0
+	}
+	return q
+}
+
+// SetCollation 设置排序规则
+func (q *MongoQuery) SetCollation(collation *options.Collation) *MongoQuery {
+	q.Collation = collation
+	return q
+}
+
+// Build 实现QueryBuilder接口
+func (q *MongoQuery) Build() interface{} {
+	return q.Filter
+}
+
+// ===== MySQL查询构建器 =====
 
 // MySQLQuery MySQL查询结构
 type MySQLQuery struct {
@@ -69,6 +129,11 @@ func (q *MySQLQuery) AddArrayCondition(field string, op Operator, values []strin
 		Values:   values,
 	})
 	return q
+}
+
+// Build 实现QueryBuilder接口
+func (q *MySQLQuery) Build() interface{} {
+	return q.buildQuery()
 }
 
 // buildQuery 构建查询
