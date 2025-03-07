@@ -10,18 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// ===== 公共类型和工具函数 =====
-
-type txKey struct{}
-
-// GetTxFromContext 从上下文中获取事务
-func GetTxFromContext(ctx context.Context) *gorm.DB {
-	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
-		return tx
-	}
-	return nil
-}
-
 // ===== MongoDB数据提供者 =====
 
 // buildFindOptions 构建MongoDB查询选项
@@ -128,7 +116,7 @@ func (p *MongoProvider[T]) Delete(ctx context.Context, query interface{}) error 
 }
 
 // Transaction 事务操作
-func (p *MongoProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
+func (p *MongoProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context, provider DataProvider[T]) error) error {
 	session, err := p.Collection.Database().Client().StartSession()
 	if err != nil {
 		return err
@@ -136,7 +124,7 @@ func (p *MongoProvider[T]) Transaction(ctx context.Context, fn func(ctx context.
 	defer session.EndSession(ctx)
 
 	callback := func(sessionContext mongo.SessionContext) (interface{}, error) {
-		return nil, fn(sessionContext)
+		return nil, fn(sessionContext, p)
 	}
 
 	_, err = session.WithTransaction(ctx, callback)
@@ -253,9 +241,10 @@ func (p *MySQLProvider[T]) Delete(ctx context.Context, query interface{}) error 
 }
 
 // Transaction 事务操作
-func (p *MySQLProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
+func (p *MySQLProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context, provider DataProvider[T]) error) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
-		return fn(context.WithValue(ctx, txKey{}, tx))
+		txProvider := NewMySQLProvider[T](tx)
+		return fn(ctx, txProvider)
 	})
 }
 

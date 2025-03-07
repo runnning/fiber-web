@@ -502,24 +502,20 @@ func TestMySQLProvider_Delete(t *testing.T) {
 func TestMySQLProvider_Transaction(t *testing.T) {
 	tests := []struct {
 		name    string
-		fn      func(context.Context) error
+		fn      func(context.Context, DataProvider[User]) error
 		wantErr bool
 	}{
 		{
 			name: "成功的事务",
-			fn: func(ctx context.Context) error {
-				db := GetTxFromContext(ctx)
+			fn: func(ctx context.Context, provider DataProvider[User]) error {
 				user := &User{Name: "TransactionUser", Email: "tx@example.com", Age: 25, Status: "active"}
-				if err := db.Create(user).Error; err != nil {
-					return err
-				}
-				return nil
+				return provider.Insert(ctx, user)
 			},
 			wantErr: false,
 		},
 		{
 			name: "失败的事务",
-			fn: func(ctx context.Context) error {
+			fn: func(ctx context.Context, provider DataProvider[User]) error {
 				return errors.New("transaction error")
 			},
 			wantErr: true,

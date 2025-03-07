@@ -191,7 +191,7 @@ type DataProvider[T any] interface {
 	Delete(ctx context.Context, query interface{}) error
 
 	// Transaction 事务操作
-	Transaction(ctx context.Context, fn func(ctx context.Context) error) error
+	Transaction(ctx context.Context, fn func(ctx context.Context, provider DataProvider[T]) error) error
 }
 
 // QueryFactory 查询工厂接口
