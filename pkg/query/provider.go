@@ -10,7 +10,39 @@ import (
 	"gorm.io/gorm"
 )
 
+// ===== 公共类型和工具函数 =====
+
+type txKey struct{}
+
+// GetTxFromContext 从上下文中获取事务
+func GetTxFromContext(ctx context.Context) *gorm.DB {
+	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
+		return tx
+	}
+	return nil
+}
+
 // ===== MongoDB数据提供者 =====
+
+// buildFindOptions 构建MongoDB查询选项
+func buildFindOptions(req *PageRequest) *options.FindOptions {
+	opts := options.Find()
+
+	// 设置分页
+	opts.SetSkip(int64(req.Offset()))
+	opts.SetLimit(int64(req.PageSize))
+
+	// 设置排序
+	if req.OrderBy != "" {
+		order := 1 // 默认升序
+		if req.Order == "DESC" {
+			order = -1
+		}
+		opts.SetSort(bson.D{{Key: req.OrderBy, Value: order}})
+	}
+
+	return opts
+}
 
 // MongoProvider MongoDB数据提供者
 type MongoProvider[T any] struct {
@@ -41,18 +73,7 @@ func (p *MongoProvider[T]) Find(ctx context.Context, query interface{}, req *Pag
 	}
 
 	// 构建查询选项
-	opts := options.Find()
-	opts.SetSkip(int64(req.Offset()))
-	opts.SetLimit(int64(req.PageSize))
-
-	// 排序
-	if req.OrderBy != "" {
-		order := 1 // 默认升序
-		if req.Order == "DESC" {
-			order = -1
-		}
-		opts.SetSort(bson.D{{Key: req.OrderBy, Value: order}})
-	}
+	opts := buildFindOptions(req)
 
 	// 执行查询
 	cursor, err := p.Collection.Find(ctx, filter, opts)
@@ -152,45 +173,37 @@ func NewMySQLProvider[T any](db *gorm.DB) *MySQLProvider[T] {
 	}
 }
 
+// prepareSession 准备数据库会话
+func (p *MySQLProvider[T]) prepareSession(ctx context.Context, query interface{}) (*gorm.DB, error) {
+	db, err := p.parseQuery(query)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建新的会话
+	db = db.Session(&gorm.Session{})
+
+	// 设置模型和上下文
+	var model T
+	return db.Model(&model).WithContext(ctx), nil
+}
+
 // Count 计算符合条件的记录总数
 func (p *MySQLProvider[T]) Count(ctx context.Context, query interface{}) (int64, error) {
 	var total int64
-	db, err := p.parseQuery(query)
+	db, err := p.prepareSession(ctx, query)
 	if err != nil {
 		return 0, err
 	}
-
-	// 创建新的会话以避免影响原始查询
-	db = db.Session(&gorm.Session{})
-
-	// 确保设置了正确的表
-	var model T
-	db = db.Model(&model)
-
-	// 应用上下文
-	db = db.WithContext(ctx)
-
-	// 执行查询
-	err = db.Count(&total).Error
-	return total, err
+	return total, db.Count(&total).Error
 }
 
 // Find 查询数据列表
 func (p *MySQLProvider[T]) Find(ctx context.Context, query interface{}, req *PageRequest, result *[]T) error {
-	db, err := p.parseQuery(query)
+	db, err := p.prepareSession(ctx, query)
 	if err != nil {
 		return err
 	}
-
-	// 创建新的会话以避免影响原始查询
-	db = db.Session(&gorm.Session{})
-
-	// 确保设置了正确的表
-	var model T
-	db = db.Model(&model)
-
-	// 添加上下文
-	db = db.WithContext(ctx)
 
 	// 排序
 	if req.OrderBy != "" {
@@ -207,12 +220,11 @@ func (p *MySQLProvider[T]) Find(ctx context.Context, query interface{}, req *Pag
 
 // FindOne 查询单条记录
 func (p *MySQLProvider[T]) FindOne(ctx context.Context, query interface{}, result *T) error {
-	db, err := p.parseQuery(query)
+	db, err := p.prepareSession(ctx, query)
 	if err != nil {
 		return err
 	}
-
-	return db.WithContext(ctx).First(result).Error
+	return db.First(result).Error
 }
 
 // Insert 插入记录
@@ -222,31 +234,26 @@ func (p *MySQLProvider[T]) Insert(ctx context.Context, data *T) error {
 
 // Update 更新记录
 func (p *MySQLProvider[T]) Update(ctx context.Context, query interface{}, data map[string]interface{}) error {
-	db, err := p.parseQuery(query)
+	db, err := p.prepareSession(ctx, query)
 	if err != nil {
 		return err
 	}
-
-	return db.WithContext(ctx).Updates(data).Error
+	return db.Updates(data).Error
 }
 
 // Delete 删除记录
 func (p *MySQLProvider[T]) Delete(ctx context.Context, query interface{}) error {
-	db, err := p.parseQuery(query)
+	db, err := p.prepareSession(ctx, query)
 	if err != nil {
 		return err
 	}
-
-	var model T
-	return db.WithContext(ctx).Delete(&model).Error
+	return db.Delete(new(T)).Error
 }
 
 // Transaction 事务操作
 func (p *MySQLProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
-		// 创建事务上下文
-		txCtx := context.WithValue(ctx, "tx", tx)
-		return fn(txCtx)
+		return fn(context.WithValue(ctx, txKey{}, tx))
 	})
 }
 
@@ -259,7 +266,13 @@ func (p *MySQLProvider[T]) parseQuery(query interface{}) (*gorm.DB, error) {
 	switch q := query.(type) {
 	case *gorm.DB:
 		return q, nil
+	case *MySQLQuery:
+		return q.db, nil
+	case map[string]interface{}:
+		return p.DB.Where(q), nil
+	case func(*gorm.DB) *gorm.DB:
+		return q(p.DB), nil
 	default:
-		return nil, errors.New("unsupported query type for MySQL")
+		return nil, errors.New("不支持的MySQL查询类型")
 	}
 }

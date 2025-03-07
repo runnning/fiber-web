@@ -2,6 +2,8 @@ package query
 
 import (
 	"context"
+	"errors"
+	"fmt"
 )
 
 // ===== 分页相关 =====
@@ -14,26 +16,43 @@ type PageRequest struct {
 	Order    string `json:"order" query:"order"`       // 排序方向：ASC/DESC
 }
 
+const (
+	DefaultPage     = 1
+	DefaultPageSize = 10
+	MaxPageSize     = 100
+)
+
+// Validate 验证并规范化分页请求参数
+func (r *PageRequest) Validate() {
+	if r.Page <= 0 {
+		r.Page = DefaultPage
+	}
+	if r.PageSize <= 0 {
+		r.PageSize = DefaultPageSize
+	} else if r.PageSize > MaxPageSize {
+		r.PageSize = MaxPageSize
+	}
+	if r.Order != "" && r.Order != "ASC" && r.Order != "DESC" {
+		r.Order = "ASC"
+	}
+}
+
+// NewPageRequest 创建分页请求
+func NewPageRequest(page, pageSize int) *PageRequest {
+	req := &PageRequest{
+		Page:     page,
+		PageSize: pageSize,
+	}
+	req.Validate()
+	return req
+}
+
 // PageResponse 分页响应
 type PageResponse[T any] struct {
 	List     []T   `json:"list"`     // 数据列表
 	Total    int64 `json:"total"`    // 总记录数
 	Page     int   `json:"page"`     // 当前页码
 	PageSize int   `json:"pageSize"` // 每页大小
-}
-
-// NewPageRequest 创建分页请求
-func NewPageRequest(page, pageSize int) *PageRequest {
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
-	return &PageRequest{
-		Page:     page,
-		PageSize: pageSize,
-	}
 }
 
 // Offset 获取偏移量
@@ -183,14 +202,27 @@ type QueryFactory interface {
 
 // Paginate 通用分页查询函数
 func Paginate[T any](ctx context.Context, builder QueryBuilder, provider DataProvider[T], req *PageRequest, result *[]T) (*PageResponse[T], error) {
+	if builder == nil || provider == nil || req == nil || result == nil {
+		return nil, errors.New("invalid parameters")
+	}
+
+	// 验证并规范化分页参数
+	req.Validate()
+
 	// 计算总记录数（不应用分页参数）
 	countQuery := builder.Build()
 	total, err := provider.Count(ctx, countQuery)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("count error: %w", err)
 	}
 
-	// 应用分页参数
+	// 如果没有数据，直接返回空结果
+	if total == 0 {
+		*result = make([]T, 0)
+		return NewPageResponse(*result, total, req.Page, req.PageSize), nil
+	}
+
+	// 应用排序
 	if req.OrderBy != "" {
 		builder.OrderBy(req.OrderBy, req.Order)
 	}
@@ -198,12 +230,10 @@ func Paginate[T any](ctx context.Context, builder QueryBuilder, provider DataPro
 	// 设置分页限制和偏移
 	builder.Limit(req.PageSize).Offset(req.Offset())
 
-	// 构建查询
-	query := builder.Build()
-
 	// 查询数据列表
+	query := builder.Build()
 	if err := provider.Find(ctx, query, req, result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find error: %w", err)
 	}
 
 	return NewPageResponse(*result, total, req.Page, req.PageSize), nil
