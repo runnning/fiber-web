@@ -8,25 +8,25 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Operator 查询操作符
+// Operator 操作符类型
 type Operator string
 
 const (
-	OpEq         Operator = "eq"         // 等于
-	OpNe         Operator = "ne"         // 不等于
-	OpGt         Operator = "gt"         // 大于
-	OpGte        Operator = "gte"        // 大于等于
-	OpLt         Operator = "lt"         // 小于
-	OpLte        Operator = "lte"        // 小于等于
-	OpIn         Operator = "in"         // 在数组中
-	OpNin        Operator = "nin"        // 不在数组中
-	OpContains   Operator = "contains"   // 包含（字符串模糊查询）
-	OpStartsWith Operator = "startsWith" // 以...开始
-	OpEndsWith   Operator = "endsWith"   // 以...结束
-	OpExists     Operator = "exists"     // 字段存在
-	OpBetween    Operator = "between"    // 范围查询
-	OpIsNull     Operator = "isNull"     // 是否为空
-	OpNotNull    Operator = "notNull"    // 是否不为空
+	OpEq         Operator = "="        // 等于
+	OpNe         Operator = "!="       // 不等于
+	OpGt         Operator = ">"        // 大于
+	OpGte        Operator = ">="       // 大于等于
+	OpLt         Operator = "<"        // 小于
+	OpLte        Operator = "<="       // 小于等于
+	OpIn         Operator = "IN"       // 在列表中
+	OpNin        Operator = "NOT IN"   // 不在列表中
+	OpContains   Operator = "CONTAINS" // 包含
+	OpStartsWith Operator = "STARTS"   // 以...开始
+	OpEndsWith   Operator = "ENDS"     // 以...结束
+	OpExists     Operator = "EXISTS"   // 存在
+	OpBetween    Operator = "BETWEEN"  // 在范围内
+	OpIsNull     Operator = "IS NULL"  // 为空
+	OpNotNull    Operator = "NOT NULL" // 不为空
 )
 
 // FilterCondition 单个过滤条件

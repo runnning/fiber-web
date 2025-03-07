@@ -2,7 +2,6 @@ package query
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -1168,17 +1167,26 @@ func BuildTimeRangeQuery(db *gorm.DB, field string, startTime, endTime interface
 
 // parseAggregateExpr 解析聚合函数表达式
 func parseAggregateExpr(expr string) *SelectField {
-	// 简单的解析，实际使用时可能需要更复杂的解析器
-	matches := regexp.MustCompile(`(\w+)\((.*?)\)(?:\s+[aA][sS]\s+(\w+))?`).FindStringSubmatch(expr)
-	if len(matches) < 3 {
+	if expr == "" {
 		return nil
 	}
 
 	field := &SelectField{}
-	field.Function = AggregateFunction(strings.ToLower(matches[1]))
-	field.Field = matches[2]
-	if len(matches) > 3 && matches[3] != "" {
-		field.Alias = matches[3]
+
+	// 简单解析 "function(field) as alias" 格式
+	parts := strings.Split(expr, " as ")
+	if len(parts) > 1 {
+		field.Alias = strings.TrimSpace(parts[1])
+		expr = parts[0]
 	}
+
+	// 解析函数和字段
+	if i := strings.Index(expr, "("); i > 0 {
+		field.Function = AggregateFunction(strings.ToLower(expr[:i]))
+		field.Field = strings.Trim(expr[i+1:len(expr)-1], " ")
+	} else {
+		field.Field = expr
+	}
+
 	return field
 }

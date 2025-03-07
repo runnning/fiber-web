@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -57,23 +58,35 @@ func (p *MongoProvider[T]) Count(ctx context.Context, query interface{}) (int64,
 func (p *MongoProvider[T]) Find(ctx context.Context, query interface{}, req *PageRequest, result *[]T) error {
 	filter, err := p.parseQuery(query)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse query error: %w", err)
 	}
 
 	// 构建查询选项
-	opts := buildFindOptions(req)
+	opts := options.Find()
+	opts.SetSkip(int64(req.Offset()))
+	opts.SetLimit(int64(req.PageSize))
+
+	// 设置排序
+	if req.OrderBy != "" {
+		order := 1 // 默认升序
+		if req.Order == "DESC" {
+			order = -1
+		}
+		opts.SetSort(bson.D{{Key: req.OrderBy, Value: order}})
+	}
 
 	// 执行查询
 	cursor, err := p.Collection.Find(ctx, filter, opts)
 	if err != nil {
-		return err
+		return fmt.Errorf("find error: %w", err)
 	}
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
+	defer cursor.Close(ctx)
 
 	// 解码结果
-	return cursor.All(ctx, result)
+	if err := cursor.All(ctx, result); err != nil {
+		return fmt.Errorf("decode error: %w", err)
+	}
+	return nil
 }
 
 // FindOne 查询单条记录
