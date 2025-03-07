@@ -16,7 +16,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*entity.User, error)
 	Update(ctx context.Context, user *entity.User) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.User], error)
+	List(ctx context.Context, param *query.Query) (*query.PageResult[entity.User], error)
 }
 
 // userRepository 用户仓库实现
@@ -60,24 +60,6 @@ func (r *userRepository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&entity.User{}, id).Error
 }
 
-func (r *userRepository) List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.User], error) {
-	var users []entity.User
-
-	// 使用传入的查询构建器
-	// 如果查询构建器为空，创建一个新的
-	if queryBuilder == nil {
-		// 创建一个新的查询构建器
-		factory := query.NewMySQLQueryFactory(r.db)
-		queryBuilder = factory.NewQuery()
-
-		// 设置模型
-		db := r.db.WithContext(ctx).Model(&entity.User{})
-		queryBuilder.WhereRaw(db)
-	}
-
-	// 创建数据提供者
-	provider := query.NewMySQLProvider[entity.User](r.db)
-
-	// 执行分页查询
-	return query.Paginate(ctx, queryBuilder, provider, req, &users)
+func (r *userRepository) List(ctx context.Context, param *query.Query) (*query.PageResult[entity.User], error) {
+	return query.NewMySQLQuerier[entity.User](r.db).FindPage(ctx, param)
 }

@@ -1,256 +1,168 @@
-# 查询包 (Query Package)
+# Query Package
 
-这个包提供了一个灵活、统一的查询构建器和数据提供者接口，支持MongoDB和MySQL等多种数据库。
+这是一个用于MySQL和MongoDB的通用分页条件查询包。它提供了简单且统一的API来处理分页和条件查询，支持泛型。
 
-## 主要改进
+## 特性
 
-1. **统一的查询接口**：MongoDB和MySQL使用相同的接口和API，使代码更加一致和可维护
-2. **灵活的条件构建**：支持简单条件、条件组（AND/OR）和原始条件，可以构建复杂的查询
-3. **链式调用API**：所有查询构建器方法都支持链式调用，使代码更加简洁
-4. **工厂模式**：使用工厂模式创建查询构建器，降低耦合度
-5. **完整的CRUD支持**：数据提供者接口支持完整的CRUD操作和事务处理
-6. **类型安全**：使用泛型确保类型安全
-7. **职责分离**：分页请求只负责分页和排序，查询条件由查询构建器负责，符合单一职责原则
+- 支持MySQL（基于GORM）和MongoDB
+- 统一的查询条件接口
+- 泛型支持，提供类型安全
+- 灵活的操作符支持
+- 支持排序和字段选择
+- 自动处理分页逻辑
+- 链式调用API
+- 可扩展的设计
 
-## 使用示例
+## 安装
 
-### MongoDB示例
-
-```go
-// 创建MongoDB查询工厂
-factory := query.NewMongoQueryFactory()
-
-// 创建查询构建器
-builder := factory.NewQuery()
-
-// 构建查询条件
-builder.WhereSimple("age", query.OpGte, 18).
-        WhereSimple("status", query.OpEq, "active").
-        WhereGroup(query.LogicOr,
-            query.NewContainsCondition("name", "张"),
-            query.NewContainsCondition("name", "李"),
-        )
-
-// 创建分页请求
-pageReq := query.NewPageRequest(1, 10)
-pageReq.OrderBy = "createdAt"
-pageReq.Order = "DESC"
-
-// 创建数据提供者
-provider := query.NewMongoProvider[User](collection)
-
-// 执行查询
-var users []User
-pageRes, err := query.Paginate(ctx, builder, provider, pageReq, &users)
-if err != nil {
-    // 处理错误
-}
-
-// 使用查询结果
-fmt.Printf("总记录数: %d\n", pageRes.Total)
-for _, user := range pageRes.List {
-    fmt.Printf("用户: %s\n", user.Name)
-}
+```bash
+go get -u github.com/yourusername/query
 ```
 
-### MySQL示例
+## 快速开始
+
+### 基本使用
 
 ```go
-// 创建MySQL查询工厂
-factory := query.NewMySQLQueryFactory(db)
+// 创建查询条件
+query := query.NewQuery().
+    SetPage(1, 10).
+    AddCondition("age", query.OpGte, 18).
+    AddOrderBy("created_at DESC").
+    Select("id", "name", "age")
 
-// 创建查询构建器
-builder := factory.NewQuery()
-
-// 构建查询条件
-builder.WhereSimple("age", query.OpGte, 18).
-        WhereSimple("status", query.OpEq, "active").
-        WhereGroup(query.LogicOr,
-            query.NewContainsCondition("name", "张"),
-            query.NewContainsCondition("name", "李"),
-        ).
-        Join("departments", "users.dept_id = departments.id").
-        Select("users.*", "departments.name as dept_name").
-        GroupBy("users.dept_id").
-        Having(query.NewGtCondition("COUNT(*)", 5))
-
-// 创建分页请求
-pageReq := query.NewPageRequest(1, 10)
-pageReq.OrderBy = "users.created_at"
-pageReq.Order = "DESC"
-
-// 创建数据提供者
-provider := query.NewMySQLProvider[User](db)
-
-// 执行查询
-var users []User
-pageRes, err := query.Paginate(ctx, builder, provider, pageReq, &users)
-if err != nil {
-    // 处理错误
+// MySQL查询
+type User struct {
+    ID   uint   `gorm:"primarykey"`
+    Name string
+    Age  int
 }
 
-// 使用查询结果
-fmt.Printf("总记录数: %d\n", pageRes.Total)
-for _, user := range pageRes.List {
-    fmt.Printf("用户: %s, 部门: %s\n", user.Name, user.DeptName)
+mysqlQuerier := query.NewMySQLQuerier[User](db)
+result, err := mysqlQuerier.FindPage(query)
+
+// MongoDB查询
+type Product struct {
+    ID    primitive.ObjectID `bson:"_id"`
+    Name  string            `bson:"name"`
+    Price float64           `bson:"price"`
 }
+
+mongoQuerier := query.NewMongoQuerier[Product](collection)
+result, err := mongoQuerier.FindPage(ctx, query)
 ```
 
-### 高级查询示例
+### 高级用法
 
 ```go
-// 创建时间范围条件
-startTime := time.Now().AddDate(0, -1, 0) // 一个月前
-endTime := time.Now()
-timeCondition := query.NewTimeRangeCondition("created_at", &startTime, &endTime)
+// 1. 禁用分页，查询所有数据
+query := query.NewQuery().
+    DisablePagination().
+    AddCondition("status", query.OpEq, 1)
 
-// 创建搜索条件
-searchCondition := query.NewSearchCondition("张三", []string{"name", "nickname", "email"})
+// 2. 多条件查询
+query := query.NewQuery().
+    SetPage(1, 20).
+    AddCondition("age", query.OpGte, 18).
+    AddCondition("status", query.OpEq, 1).
+    AddCondition("name", query.OpLike, "张").
+    AddOrderBy("age DESC").
+    AddOrderBy("created_at DESC")
 
-// 组合条件
-builder := factory.NewQuery().
-    Where(timeCondition).
-    Where(searchCondition).
-    WhereSimple("status", query.OpEq, "active")
+// 3. 字段选择
+query := query.NewQuery().
+    Select("id", "name", "age"). // 设置要查询的字段
+    AddSelect("status")          // 追加字段
 
-// 创建分页请求
-pageReq := query.NewPageRequest(1, 20)
-pageReq.OrderBy = "created_at"
-pageReq.Order = "DESC"
+// 4. 区间查询
+query := query.NewQuery().
+    AddCondition("age", query.OpBetween, []interface{}{18, 30}).
+    AddCondition("created_at", query.OpBetween, []interface{}{startTime, endTime})
 
-// 执行查询
-// ...
+// 5. IN查询
+query := query.NewQuery().
+    AddCondition("status", query.OpIn, []int{1, 2, 3}).
+    AddCondition("type", query.OpNotIn, []string{"deleted", "disabled"})
 ```
 
-### 从HTTP请求参数构建查询条件
+## 默认值
+
+- 分页：默认启用
+- 页码（Page）：默认为 1
+- 每页数量（PageSize）：默认为 10
+- 切片字段预分配容量：
+  - Conditions: 4
+  - OrderBy: 2
+  - SelectFields: 4
+
+## 支持的操作符
+
+| 操作符 | 说明 | 示例 |
+|--------|------|------|
+| OpEq | 等于 | `AddCondition("status", OpEq, 1)` |
+| OpNe | 不等于 | `AddCondition("status", OpNe, 0)` |
+| OpGt | 大于 | `AddCondition("age", OpGt, 18)` |
+| OpGte | 大于等于 | `AddCondition("age", OpGte, 18)` |
+| OpLt | 小于 | `AddCondition("price", OpLt, 100)` |
+| OpLte | 小于等于 | `AddCondition("price", OpLte, 100)` |
+| OpIn | 在列表中 | `AddCondition("status", OpIn, []int{1,2})` |
+| OpNotIn | 不在列表中 | `AddCondition("status", OpNotIn, []int{0,-1})` |
+| OpLike | 模糊匹配 | `AddCondition("name", OpLike, "张")` |
+| OpNotLike | 不匹配 | `AddCondition("name", OpNotLike, "李")` |
+| OpBetween | 区间 | `AddCondition("age", OpBetween, []interface{}{18, 30})` |
+| OpNotBetween | 不在区间 | `AddCondition("age", OpNotBetween, []interface{}{0, 18})` |
+
+## API参考
+
+### Query 方法
 
 ```go
-// 假设有一个HTTP请求处理函数
-func ListUsers(c *fiber.Ctx) error {
-    // 解析分页参数
-    page, _ := strconv.Atoi(c.Query("page", "1"))
-    pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
-    pageReq := query.NewPageRequest(page, pageSize)
-    pageReq.OrderBy = c.Query("orderBy", "created_at")
-    pageReq.Order = c.Query("order", "DESC")
-    
-    // 创建查询构建器
-    builder := factory.NewQuery()
-    
-    // 从请求参数构建查询条件
-    if status := c.Query("status"); status != "" {
-        builder.WhereSimple("status", query.OpEq, status)
-    }
-    
-    if name := c.Query("name"); name != "" {
-        builder.WhereSimple("name", query.OpContains, name)
-    }
-    
-    if minAge, err := strconv.Atoi(c.Query("minAge", "0")); err == nil && minAge > 0 {
-        builder.WhereSimple("age", query.OpGte, minAge)
-    }
-    
-    // 执行查询
-    var users []User
-    pageRes, err := query.Paginate(ctx, builder, provider, pageReq, &users)
-    if err != nil {
-        return err
-    }
-    
-    return c.JSON(pageRes)
-}
+// 创建新查询
+NewQuery() *Query
+
+// 分页相关
+SetPage(page, pageSize int) *Query
+SetPagination(pagination *Pagination) *Query
+DisablePagination() *Query
+EnablePaginationFunc() *Query
+
+// 字段选择
+Select(fields ...string) *Query
+AddSelect(fields ...string) *Query
+
+// 条件和排序
+AddCondition(field string, operator Operator, value interface{}) *Query
+AddOrderBy(order string) *Query
 ```
 
-## 事务示例
+### 查询器接口
 
 ```go
-provider := query.NewMySQLProvider[User](db)
-
-err := provider.Transaction(ctx, func(ctx context.Context, txProvider DataProvider[User]) error {
-    // 在事务中执行操作
-    user := User{Name: "张三", Age: 30}
-    
-    // 插入记录 - 使用事务提供者
-    if err := txProvider.Insert(ctx, &user); err != nil {
-        return err
-    }
-    
-    // 更新记录 - 使用事务提供者
-    builder := factory.NewQuery().WhereSimple("id", query.OpEq, user.ID)
-    updates := map[string]interface{}{"status": "active"}
-    if err := txProvider.Update(ctx, builder.Build(), updates); err != nil {
-        return err
-    }
-    
-    return nil
-})
-
-if err != nil {
-    // 处理事务错误
+type Querier[T any] interface {
+    FindPage(q *Query) (*PageResult[T], error)
 }
 ```
-
-### MongoDB事务示例
-
-```go
-provider := query.NewMongoProvider[User](collection)
-
-err := provider.Transaction(ctx, func(ctx context.Context, txProvider DataProvider[User]) error {
-    // 在事务中执行操作
-    user := User{Name: "张三", Age: 30}
-    
-    // 使用事务提供者执行操作
-    if err := txProvider.Insert(ctx, &user); err != nil {
-        return err
-    }
-    
-    filter := bson.M{"_id": user.ID}
-    update := map[string]interface{}{"status": "active"}
-    if err := txProvider.Update(ctx, filter, update); err != nil {
-        return err
-    }
-    
-    return nil
-})
-
-if err != nil {
-    // 处理事务错误
-}
-```
-
-## 最佳实践
-
-1. **查询构建**
-   - 使用查询构建器而不是直接构建原始查询
-   - 对于复杂查询，使用条件组（WhereGroup）组织条件
-   - 使用 WhereSimple 和预定义的操作符，避免直接使用原始条件
-
-2. **事务处理**
-   - 总是使用传入的事务提供者（txProvider）执行事务内的操作
-   - 保持事务函数的原子性，要么全部成功，要么全部失败
-   - 事务函数应该是幂等的，可以安全重试
-
-3. **错误处理**
-   - 检查所有返回的错误
-   - 使用有意义的错误信息
-   - 在事务中发生错误时及时返回，避免继续执行
-
-4. **性能优化**
-   - 只查询需要的字段
-   - 合理使用索引
-   - 避免在循环中执行数据库操作
-
-5. **代码组织**
-   - 将查询逻辑封装在仓储层
-   - 使用工厂模式创建查询构建器和提供者
-   - 保持接口的一致性，不要暴露底层实现细节
 
 ## 注意事项
 
-1. MongoDB的聚合查询（如GROUP BY、HAVING等）需要使用聚合管道，当前实现做了简化处理
-2. 对于复杂的原生查询，可以使用WhereRaw方法传入原始查询条件
-3. 查询构建器和数据提供者是解耦的，可以单独使用
-4. 所有查询方法都支持上下文（context），可以用于超时控制和取消操作
-5. 分页请求（PageRequest）只负责分页和排序，不再包含过滤条件，过滤条件应通过查询构建器（QueryBuilder）设置
-6. 事务操作应该通过事务提供者执行，而不是直接使用数据库连接
-7. 查询构建器生成的查询是数据库无关的，具体的转换由数据提供者处理 
+1. 需要Go 1.18或更高版本（因为使用了泛型特性）
+2. MySQL查询器基于GORM，需要确保模型符合GORM的规范
+3. MongoDB查询器使用官方的mongo-driver，需要确保模型有正确的bson标签
+4. 排序字段格式为："字段名 ASC"或"字段名 DESC"，默认为ASC
+5. MongoDB的FindPage方法需要额外的context.Context参数
+
+## 最佳实践
+
+1. 使用 `NewQuery()` 创建查询对象，避免手动初始化
+2. 使用链式调用构建查询条件，提高代码可读性
+3. 合理使用字段选择功能，避免查询不必要的字段
+4. 需要查询全部数据时，使用 `DisablePagination()`
+5. 对于大数据量查询，合理设置分页大小
+
+## 贡献
+
+欢迎提交Issue和Pull Request。
+
+## 许可证
+
+MIT License 

@@ -16,7 +16,7 @@ type {{.Name}}Repository interface {
 	FindByID(ctx context.Context, id uint) (*entity.{{.Name}}, error)
 	Update(ctx context.Context, {{.VarName}} *entity.{{.Name}}) error
 	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.{{.Name}}], error)
+	List(ctx context.Context, param *query.Query) (*query.PageResult[entity.{{.Name}}], error)
 }
 
 type {{.VarName}}Repository struct {
@@ -49,25 +49,7 @@ func (r *{{.VarName}}Repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&entity.{{.Name}}{}, id).Error
 }
 
-func (r *{{.VarName}}Repository) List(ctx context.Context, req *query.PageRequest, queryBuilder query.QueryBuilder) (*query.PageResponse[entity.{{.Name}}], error) {
-	var {{.VarName}}s []entity.{{.Name}}
-	
-	// 使用传入的查询构建器
-	// 如果查询构建器为空，创建一个新的
-	if queryBuilder == nil {
-		// 创建一个新的查询构建器
-		factory := query.NewMySQLQueryFactory(r.db)
-		queryBuilder = factory.NewQuery()
-		
-		// 设置模型
-		db := r.db.WithContext(ctx).Model(&entity.{{.Name}}{})
-		queryBuilder.WhereRaw(db)
-	}
-	
-	// 创建数据提供者
-	provider := query.NewMySQLProvider[entity.{{.Name}}](r.db)
-	
-	// 执行分页查询
-	return query.Paginate(ctx, queryBuilder, provider, req, &{{.VarName}}s)
+func (r *{{.VarName}}Repository) List(ctx context.Context, param *query.Query) (*query.PageResult[entity.{{.Name}}], error) {
+	return query.NewMySQLQuerier[entity.{{.Name}}](r.db).FindPage(ctx, param)
 }
 `

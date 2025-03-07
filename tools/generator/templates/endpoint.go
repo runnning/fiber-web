@@ -96,59 +96,18 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 }
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
-	// 解析分页参数
-	//page, _ := strconv.Atoi(c.Query("page", "1"))
-	//pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
-	
-	// 创建分页请求
-	req := ctx.GetPagination(c)
-	//req.OrderBy = c.Query("orderBy", "id")
-	//req.Order = c.Query("order", "DESC")
-	
-	// 创建查询构建器
-	queryBuilder := query.NewMySQLQueryFactory(nil).NewQuery()
-	
-	// 添加过滤条件
-	if status := c.Query("status"); status != "" {
-		queryBuilder.WhereSimple("status", query.OpEq, status)
-	}
-	
-	if category := c.Query("category"); category != "" {
-		queryBuilder.WhereSimple("category", query.OpEq, category)
-	}
-	
-	if search := c.Query("search"); search != "" {
-		searchCondition := query.NewSearchCondition(search, []string{"name"})
-		queryBuilder.Where(searchCondition)
-	}
-	
-	// 添加时间范围过滤
-	var startTime, endTime *time.Time
-	if startTimeStr := c.Query("start_time"); startTimeStr != "" {
-		t, err := time.Parse(time.RFC3339, startTimeStr)
-		if err == nil {
-			startTime = &t
-		}
-	}
-	
-	if endTimeStr := c.Query("end_time"); endTimeStr != "" {
-		t, err := time.Parse(time.RFC3339, endTimeStr)
-		if err == nil {
-			endTime = &t
-		}
-	}
-	
-	if startTime != nil || endTime != nil {
-		timeCondition := query.NewTimeRangeCondition("created_at", startTime, endTime)
-		queryBuilder.Where(timeCondition)
-	}
-	
-	// 调用业务逻辑层
-	result, err := h.{{.VarName}}UseCase.List(c.Context(), req, queryBuilder)
+	pagination := ctx.GetPagination(c)
+
+	params := query.NewQuery().
+		AddCondition("status", query.OpEq, 1).
+		AddOrderBy("id DESC").
+		SetPagination(pagination).
+		Select("id", "username", "email", "role", "status", "created_at", "updated_at")
+	result, err := h.{{.VarName}}UseCase.List(c.Context(), params)
 	if err != nil {
 		return response.ServerError(c, err)
 	}
-	
+
 	return response.Success(c, result)
 }
 `
