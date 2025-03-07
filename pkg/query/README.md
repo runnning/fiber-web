@@ -166,19 +166,19 @@ func ListUsers(c *fiber.Ctx) error {
 ```go
 provider := query.NewMySQLProvider[User](db)
 
-err := provider.Transaction(ctx, func(ctx context.Context) error {
+err := provider.Transaction(ctx, func(ctx context.Context, txProvider DataProvider[User]) error {
     // 在事务中执行操作
     user := User{Name: "张三", Age: 30}
     
-    // 插入记录
-    if err := provider.Insert(ctx, &user); err != nil {
+    // 插入记录 - 使用事务提供者
+    if err := txProvider.Insert(ctx, &user); err != nil {
         return err
     }
     
-    // 更新记录
+    // 更新记录 - 使用事务提供者
     builder := factory.NewQuery().WhereSimple("id", query.OpEq, user.ID)
     updates := map[string]interface{}{"status": "active"}
-    if err := provider.Update(ctx, builder.Build(), updates); err != nil {
+    if err := txProvider.Update(ctx, builder.Build(), updates); err != nil {
         return err
     }
     
@@ -190,10 +190,67 @@ if err != nil {
 }
 ```
 
+### MongoDB事务示例
+
+```go
+provider := query.NewMongoProvider[User](collection)
+
+err := provider.Transaction(ctx, func(ctx context.Context, txProvider DataProvider[User]) error {
+    // 在事务中执行操作
+    user := User{Name: "张三", Age: 30}
+    
+    // 使用事务提供者执行操作
+    if err := txProvider.Insert(ctx, &user); err != nil {
+        return err
+    }
+    
+    filter := bson.M{"_id": user.ID}
+    update := map[string]interface{}{"status": "active"}
+    if err := txProvider.Update(ctx, filter, update); err != nil {
+        return err
+    }
+    
+    return nil
+})
+
+if err != nil {
+    // 处理事务错误
+}
+```
+
+## 最佳实践
+
+1. **查询构建**
+   - 使用查询构建器而不是直接构建原始查询
+   - 对于复杂查询，使用条件组（WhereGroup）组织条件
+   - 使用 WhereSimple 和预定义的操作符，避免直接使用原始条件
+
+2. **事务处理**
+   - 总是使用传入的事务提供者（txProvider）执行事务内的操作
+   - 保持事务函数的原子性，要么全部成功，要么全部失败
+   - 事务函数应该是幂等的，可以安全重试
+
+3. **错误处理**
+   - 检查所有返回的错误
+   - 使用有意义的错误信息
+   - 在事务中发生错误时及时返回，避免继续执行
+
+4. **性能优化**
+   - 只查询需要的字段
+   - 合理使用索引
+   - 避免在循环中执行数据库操作
+
+5. **代码组织**
+   - 将查询逻辑封装在仓储层
+   - 使用工厂模式创建查询构建器和提供者
+   - 保持接口的一致性，不要暴露底层实现细节
+
 ## 注意事项
 
 1. MongoDB的聚合查询（如GROUP BY、HAVING等）需要使用聚合管道，当前实现做了简化处理
 2. 对于复杂的原生查询，可以使用WhereRaw方法传入原始查询条件
 3. 查询构建器和数据提供者是解耦的，可以单独使用
 4. 所有查询方法都支持上下文（context），可以用于超时控制和取消操作
-5. 分页请求（PageRequest）只负责分页和排序，不再包含过滤条件，过滤条件应通过查询构建器（QueryBuilder）设置 
+5. 分页请求（PageRequest）只负责分页和排序，不再包含过滤条件，过滤条件应通过查询构建器（QueryBuilder）设置
+6. 事务操作应该通过事务提供者执行，而不是直接使用数据库连接
+7. 查询构建器生成的查询是数据库无关的，具体的转换由数据提供者处理 
