@@ -52,15 +52,6 @@ type Condition struct {
 	Value    any      `json:"value"`    // 值
 }
 
-// NewCondition 创建查询条件
-func NewCondition(field string, operator Operator, value any) Condition {
-	return Condition{
-		Field:    field,
-		Operator: operator,
-		Value:    value,
-	}
-}
-
 // Query 查询参数
 type Query struct {
 	Pagination       *Pagination `json:"pagination"`             // 分页参数
@@ -119,7 +110,11 @@ func (q *Query) AddSelect(fields ...string) *Query {
 
 // AddCondition 追加查询条件
 func (q *Query) AddCondition(field string, operator Operator, value any) *Query {
-	q.Conditions = append(q.Conditions, NewCondition(field, operator, value))
+	q.Conditions = append(q.Conditions, Condition{
+		Field:    field,
+		Operator: operator,
+		Value:    value,
+	})
 	return q
 }
 
