@@ -243,8 +243,7 @@ func (p *MySQLProvider[T]) Delete(ctx context.Context, query interface{}) error 
 // Transaction 事务操作
 func (p *MySQLProvider[T]) Transaction(ctx context.Context, fn func(ctx context.Context, provider DataProvider[T]) error) error {
 	return p.DB.Transaction(func(tx *gorm.DB) error {
-		txProvider := NewMySQLProvider[T](tx)
-		return fn(ctx, txProvider)
+		return fn(ctx, p)
 	})
 }
 
