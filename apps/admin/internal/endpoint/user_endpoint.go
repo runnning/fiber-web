@@ -160,13 +160,10 @@ func (h *UserHandler) TestUser(c *fiber.Ctx) error {
 
 // List List取用户列表
 func (h *UserHandler) List(c *fiber.Ctx) error {
-
-	pagination := ctx.GetPagination(c)
-
 	params := query.NewQuery().
 		AddCondition("status", query.OpEq, 1).
 		AddOrderBy("id DESC").
-		SetPagination(pagination).
+		SetPagination(ctx.GetPagination(c)).
 		Select("id", "username", "email", "role", "status", "created_at", "updated_at")
 	result, err := h.userUseCase.List(c.Context(), params)
 	if err != nil {

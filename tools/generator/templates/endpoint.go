@@ -96,12 +96,10 @@ func (h *{{.Name}}Handler) Create{{.Name}}(c *fiber.Ctx) error {
 }
 
 func (h *{{.Name}}Handler) List{{.Name}}s(c *fiber.Ctx) error {
-	pagination := ctx.GetPagination(c)
-
 	params := query.NewQuery().
 		AddCondition("status", query.OpEq, 1).
 		AddOrderBy("id DESC").
-		SetPagination(pagination).
+		SetPagination(ctx.GetPagination(c)).
 		Select("id", "username", "email", "role", "status", "created_at", "updated_at")
 	result, err := h.{{.VarName}}UseCase.List(c.Context(), params)
 	if err != nil {
