@@ -508,7 +508,7 @@ func TestMySQLProvider_Transaction(t *testing.T) {
 		{
 			name: "成功的事务",
 			fn: func(ctx context.Context) error {
-				db := ctx.Value(txKey{}).(*gorm.DB)
+				db := GetTxFromContext(ctx)
 				user := &User{Name: "TransactionUser", Email: "tx@example.com", Age: 25, Status: "active"}
 				if err := db.Create(user).Error; err != nil {
 					return err

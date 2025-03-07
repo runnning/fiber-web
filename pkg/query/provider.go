@@ -80,7 +80,9 @@ func (p *MongoProvider[T]) Find(ctx context.Context, query interface{}, req *Pag
 	if err != nil {
 		return err
 	}
-	defer cursor.Close(ctx)
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 
 	// 解码结果
 	return cursor.All(ctx, result)
