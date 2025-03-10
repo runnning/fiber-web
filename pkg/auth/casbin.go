@@ -81,7 +81,7 @@ func InitRbac(db *gorm.DB) error {
 		instance.enforcer.EnableAutoSave(true)
 
 		// 添加默认策略
-		instance.addDefaultPolicies()
+		//instance.addDefaultPolicies()
 	})
 
 	if initErr != nil {
