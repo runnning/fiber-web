@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/gofiber/contrib/websocket"
 )
 
 var (
@@ -30,19 +32,25 @@ func (p *Pool) run() {
 	for {
 		select {
 		case client := <-p.register:
-			p.clients.Store(client.ID, client)
+			if client != nil {
+				p.clients.Store(client.ID, client)
+			}
 		case client := <-p.unregister:
-			if _, ok := p.clients.LoadAndDelete(client.ID); ok {
-				close(client.send)
-				client.Close()
-
-				// 从所有群组中移除
-				p.groups.Range(func(key, value interface{}) bool {
-					if group, ok := value.(*Group); ok {
-						group.clients.Delete(client.ID)
+			if client != nil {
+				if _, ok := p.clients.LoadAndDelete(client.ID); ok {
+					// 只在客户端未关闭时调用 Close
+					if !client.closed.Load() {
+						client.Close()
 					}
-					return true
-				})
+
+					// 从所有群组中移除
+					p.groups.Range(func(key, value interface{}) bool {
+						if group, ok := value.(*Group); ok {
+							group.clients.Delete(client.ID)
+						}
+						return true
+					})
+				}
 			}
 		case message := <-p.broadcast:
 			p.broadcastMessage(message)
@@ -59,10 +67,10 @@ func (p *Pool) broadcastMessage(message Message) {
 		if value, ok := p.groups.Load(message.To); ok {
 			group := value.(*Group)
 			group.clients.Range(func(key, value interface{}) bool {
-				if client, ok := value.(*Client); ok {
+				if client, ok := value.(*Client); ok && !client.closed.Load() {
 					select {
 					case client.send <- message:
-					default:
+					case <-time.After(100 * time.Millisecond): // 添加超时机制
 						p.unregister <- client
 					}
 				}
@@ -74,10 +82,10 @@ func (p *Pool) broadcastMessage(message Message) {
 
 	// 广播给所有客户端
 	p.clients.Range(func(key, value interface{}) bool {
-		if client, ok := value.(*Client); ok {
+		if client, ok := value.(*Client); ok && !client.closed.Load() {
 			select {
 			case client.send <- message:
-			default:
+			case <-time.After(100 * time.Millisecond): // 添加超时机制
 				p.unregister <- client
 			}
 		}
@@ -240,8 +248,14 @@ func (p *Pool) BroadcastToGroup(groupID string, messageType MessageType, content
 		Timestamp: time.Now(),
 		MessageID: fmt.Sprintf("group-%s-%d", groupID, time.Now().UnixNano()),
 	}
-	p.broadcast <- message
-	return nil
+
+	// 使用 select 避免阻塞
+	select {
+	case p.broadcast <- message:
+		return nil
+	case <-time.After(time.Second): // 添加广播超时
+		return ErrSendBufferFull
+	}
 }
 
 // GetClient 根据ID获取客户端
@@ -309,27 +323,46 @@ func (c *Client) Send(messageType MessageType, content []byte) error {
 		MessageID: fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano()),
 	}
 
+	// 使用 select 避免阻塞
 	select {
 	case c.send <- message:
 		return nil
-	default:
+	case <-time.After(time.Second): // 添加发送超时
 		return ErrSendBufferFull
 	}
 }
 
 // Close 关闭客户端连接
 func (c *Client) Close() {
+	// 使用 CompareAndSwap 确保只关闭一次
 	if !c.closed.CompareAndSwap(false, true) {
 		return
 	}
 
 	c.cancel()
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.Conn != nil {
+		// 发送关闭帧
+		_ = c.Conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "connection closed"),
+			time.Now().Add(time.Second),
+		)
 		_ = c.Conn.Close()
 		c.Conn = nil
 	}
-	c.mu.Unlock()
+
+	// 安全地关闭 send 通道
+	select {
+	case _, ok := <-c.send:
+		if ok {
+			close(c.send)
+		}
+	default:
+		close(c.send)
+	}
 }
 
 // UpdatePing 更新最后一次ping时间

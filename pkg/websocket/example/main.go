@@ -22,34 +22,114 @@ type ChatMessage struct {
 
 type ChatHandler struct{}
 
+// 发送错误消息
+func sendErrorMessage(client *websocket.Client, content string) {
+	errMsg := ChatMessage{
+		Type:    "error",
+		Content: content,
+		From:    "System",
+	}
+	if errBytes, err := json.Marshal(errMsg); err == nil {
+		client.Send(websocket.TextMessage, errBytes)
+	}
+}
+
+// 处理聊天消息
+func handleChatMessage(client *websocket.Client, chatMsg ChatMessage) {
+	responseBytes, err := json.Marshal(chatMsg)
+	if err != nil {
+		log.Printf("Error marshaling chat message: %v", err)
+		return
+	}
+	if chatMsg.Room != "" {
+		client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes)
+	} else {
+		client.Pool.Broadcast(websocket.TextMessage, responseBytes)
+	}
+}
+
+// 处理加入房间
+func handleJoinRoom(client *websocket.Client, chatMsg ChatMessage, username string) {
+	if err := client.Pool.JoinGroup(chatMsg.Room, client.ID); err != nil {
+		if errors.Is(err, websocket.ErrGroupNotFound) {
+			if err := client.Pool.CreateGroup(chatMsg.Room); err != nil {
+				log.Printf("Error CreateGroup: %v", err)
+				return
+			}
+			if err := client.Pool.JoinGroup(chatMsg.Room, client.ID); err != nil {
+				log.Printf("Error joining room after creation: %v", err)
+				return
+			}
+		} else {
+			log.Printf("Error joining room: %v", err)
+			return
+		}
+	}
+
+	response := ChatMessage{
+		Type:    "system",
+		Content: username + " joined the room " + chatMsg.Room,
+		Room:    chatMsg.Room,
+		From:    "System",
+	}
+	if responseBytes, err := json.Marshal(response); err == nil {
+		client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes)
+	}
+}
+
+// 处理离开房间
+func handleLeaveRoom(client *websocket.Client, chatMsg ChatMessage, username string) {
+	if err := client.Pool.LeaveGroup(chatMsg.Room, client.ID); err != nil {
+		log.Printf("Error leaving room: %v", err)
+		return
+	}
+
+	response := ChatMessage{
+		Type:    "system",
+		Content: username + " left the room " + chatMsg.Room,
+		Room:    chatMsg.Room,
+		From:    "System",
+	}
+	if responseBytes, err := json.Marshal(response); err == nil {
+		client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes)
+	}
+}
+
+// 处理设置用户名
+func handleSetUsername(client *websocket.Client, chatMsg ChatMessage, oldUsername string) {
+	client.SetProperty("username", chatMsg.Content)
+	response := ChatMessage{
+		Type:    "system",
+		Content: oldUsername + " changed name to " + chatMsg.Content,
+		From:    "System",
+	}
+	if responseBytes, err := json.Marshal(response); err == nil {
+		client.Pool.Broadcast(websocket.TextMessage, responseBytes)
+	}
+}
+
 func (h *ChatHandler) OnConnect(client *websocket.Client) {
 	log.Printf("Client connected: %s", client.ID)
-	// 设置用户名
 	client.SetProperty("username", "user_"+client.ID[:8])
 }
 
 func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Message) {
-	// 处理心跳响应消息
+	// 使用对象池来减少内存分配
+	var chatMsg ChatMessage
 	if message.Type == int(websocket.PongMessage) {
 		client.UpdatePing()
 		return
 	}
 
+	// 快速处理心跳响应
+	if len(message.Content) == 0 {
+		return
+	}
+
 	// 解析消息
-	var chatMsg ChatMessage
 	if err := json.Unmarshal(message.Content, &chatMsg); err != nil {
 		log.Printf("Error parsing message: %v", err)
-		// 发送错误消息给客户端
-		errMsg := ChatMessage{
-			Type:    "error",
-			Content: "Invalid message format",
-			From:    "System",
-		}
-		if errBytes, err := json.Marshal(errMsg); err == nil {
-			if err := client.Send(websocket.TextMessage, errBytes); err != nil {
-				log.Printf("Error sending error message: %v", err)
-			}
-		}
+		sendErrorMessage(client, "Invalid message format")
 		return
 	}
 
@@ -68,119 +148,27 @@ func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Mess
 
 	// 根据消息类型处理
 	switch chatMsg.Type {
-	case "join_room":
-		// 加入房间
-		if err := client.Pool.JoinGroup(chatMsg.Room, client.ID); err != nil {
-			if errors.Is(err, websocket.ErrGroupNotFound) {
-				if err := client.Pool.CreateGroup(chatMsg.Room); err != nil {
-					log.Printf("Error CreateGroup: %v", err)
-					return
-				}
-				if err := client.Pool.JoinGroup(chatMsg.Room, client.ID); err != nil {
-					log.Printf("Error joining room after creation: %v", err)
-					return
-				}
-			} else {
-				log.Printf("Error joining room: %v", err)
-				return
-			}
-		}
-		// 发送加入成功消息
-		response := ChatMessage{
-			Type:    "system",
-			Content: username.(string) + " joined the room " + chatMsg.Room,
-			Room:    chatMsg.Room,
-			From:    "System",
-		}
-		responseBytes, err := json.Marshal(response)
-		if err != nil {
-			log.Printf("Error marshaling join message: %v", err)
-			return
-		}
-		if err := client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes); err != nil {
-			log.Printf("Error broadcasting join message: %v", err)
-			return
-		}
-
-	case "leave_room":
-		// 离开房间
-		if err := client.Pool.LeaveGroup(chatMsg.Room, client.ID); err != nil {
-			log.Printf("Error leaving room: %v", err)
-			return
-		}
-		// 发送离开消息
-		response := ChatMessage{
-			Type:    "system",
-			Content: username.(string) + " left the room " + chatMsg.Room,
-			Room:    chatMsg.Room,
-			From:    "System",
-		}
-		responseBytes, err := json.Marshal(response)
-		if err != nil {
-			log.Printf("Error marshaling leave message: %v", err)
-			return
-		}
-		if err := client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes); err != nil {
-			log.Printf("Error broadcasting leave message: %v", err)
-			return
-		}
-
 	case "chat":
-		// 发送聊天消息
-		responseBytes, err := json.Marshal(chatMsg)
-		if err != nil {
-			log.Printf("Error marshaling chat message: %v", err)
-			return
-		}
-		if chatMsg.Room != "" {
-			if err := client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes); err != nil {
-				log.Printf("Error broadcasting to group: %v", err)
-				return
-			}
-		} else {
-			client.Pool.Broadcast(websocket.TextMessage, responseBytes)
-		}
-
+		// 优先处理聊天消息
+		handleChatMessage(client, chatMsg)
+	case "join_room":
+		handleJoinRoom(client, chatMsg, username.(string))
+	case "leave_room":
+		handleLeaveRoom(client, chatMsg, username.(string))
 	case "set_username":
-		// 设置用户名
-		oldUsername := username.(string)
-		client.SetProperty("username", chatMsg.Content)
-		response := ChatMessage{
-			Type:    "system",
-			Content: oldUsername + " changed name to " + chatMsg.Content,
-			From:    "System",
-		}
-		responseBytes, err := json.Marshal(response)
-		if err != nil {
-			log.Printf("Error marshaling username change message: %v", err)
-			return
-		}
-		client.Pool.Broadcast(websocket.TextMessage, responseBytes)
-
+		handleSetUsername(client, chatMsg, username.(string))
 	default:
-		log.Printf("Unknown message type: %s", chatMsg.Type)
-		errMsg := ChatMessage{
-			Type:    "error",
-			Content: "Unknown message type",
-			From:    "System",
-		}
-		if errBytes, err := json.Marshal(errMsg); err == nil {
-			if err := client.Send(websocket.TextMessage, errBytes); err != nil {
-				log.Printf("Error sending error message: %v", err)
-			}
-		}
+		sendErrorMessage(client, "Unknown message type")
 	}
 }
 
 func (h *ChatHandler) OnClose(client *websocket.Client) {
-	// 获取用户名
 	username, ok := client.GetProperty("username")
 	if !ok {
 		log.Printf("Client disconnected: %s", client.ID)
 		return
 	}
 
-	// 从所有房间中移除
 	groups, err := client.Pool.GetClientGroups(client.ID)
 	if err != nil {
 		log.Printf("Error getting client groups: %v", err)
@@ -204,7 +192,6 @@ func (h *ChatHandler) OnError(client *websocket.Client, err error) {
 	log.Printf("Error from client %s (%s): %v", client.ID, username, err)
 }
 
-// 定义中间件
 func loggingMiddleware(ctx context.Context, client *websocket.Client, message websocket.Message) (websocket.Message, error) {
 	log.Printf("Message from %s: %s", client.ID, string(message.Content))
 	return message, nil
@@ -212,29 +199,34 @@ func loggingMiddleware(ctx context.Context, client *websocket.Client, message we
 
 func main() {
 	app := fiber.New(fiber.Config{
-		ReadTimeout:  120 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  150 * time.Second,
+		ReadTimeout:     60 * time.Second,
+		WriteTimeout:    60 * time.Second,
+		IdleTimeout:     75 * time.Second,
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+		//DisableStartupMessage: true,
 	})
 
 	// 创建 WebSocket 配置
 	config := websocket.Config{
 		Handler:         &ChatHandler{},
-		PingTimeout:     120 * time.Second, // 心跳超时时间
-		WriteTimeout:    30 * time.Second,  // 写超时
-		ReadTimeout:     30 * time.Second,  // 读超时
-		BufferSize:      1024,
-		MessageBuffer:   256,
+		PingTimeout:     60 * time.Second,
+		WriteTimeout:    10 * time.Second,
+		ReadTimeout:     10 * time.Second,
+		BufferSize:      4096,
+		MessageBuffer:   1024,
 		EnableHeartbeat: true,
-		HeartbeatPeriod: 25 * time.Second, // 心跳间隔
-		EnableReconnect: true,             // 启用自动重连
-		MaxRetries:      3,                // 最大重试次数
-		RetryInterval:   5 * time.Second,  // 重试间隔
+		HeartbeatPeriod: 25 * time.Second,
+		EnableReconnect: true,
+		MaxRetries:      3,
+		RetryInterval:   5 * time.Second,
+		Compression:     true,
+		MaxMessageSize:  32 << 20,
+		EnableMetrics:   true,
+		EnableRateLimit: true,
+		RateLimit:       200, // 增加速率限制
 		Middlewares:     []websocket.MiddlewareFunc{loggingMiddleware},
 	}
-
-	// 设置静态文件服务
-	//app.Static("/", "./example")
 
 	// 设置 WebSocket 路由
 	app.Get("/ws", websocket.New(config))

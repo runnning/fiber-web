@@ -100,45 +100,71 @@
         let lastPongTime = Date.now();
         const maxReconnectAttempts = 5;
         const reconnectDelay = 3000;
-        const heartbeatDelay = 5000;  // 5秒发送一次心跳
-        const heartbeatTimeout = 15000; // 15秒没有响应就认为断开
+        const heartbeatDelay = 15000;
+        const heartbeatTimeout = 30000;
+        const messageQueue = [];
+        const maxQueueSize = 50;       // 减小队列大小，避免消息堆积
+        const batchSize = 5;           // 减小批量发送大小，提高响应速度
+        let sendingInterval;
+        let isProcessing = false;      // 添加处理标志
 
         function connect() {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 return;
             }
 
-            // 如果存在旧连接，先清理
             cleanup();
 
             ws = new WebSocket('ws://localhost:3000/ws');
+            ws.binaryType = 'arraybuffer'; // 设置二进制类型，提高传输效率
 
             ws.onopen = () => {
                 appendMessage('系统', '连接成功', 'system');
                 reconnectAttempts = 0;
                 lastPongTime = Date.now();
                 startHeartbeat();
-                // 重新加入房间
+                startMessageSender();
                 if (currentRoom) {
                     joinRoom(currentRoom, true);
                 }
             };
 
+            let messageBuffer = ''; // 添加消息缓冲
             ws.onmessage = (event) => {
-                lastPongTime = Date.now(); // 更新最后接收消息的时间
+                lastPongTime = Date.now();
                 try {
-                    const message = JSON.parse(event.data);
-                    // 处理心跳消息
-                    if (message.type === 'ping') {
-                        sendPong();
+                    // 处理消息缓冲
+                    messageBuffer += event.data;
+                    let messages;
+                    try {
+                        messages = JSON.parse(messageBuffer);
+                        messageBuffer = ''; // 清空缓冲
+                    } catch (e) {
+                        // 如果解析失败，可能是消息不完整，继续等待
                         return;
                     }
-                    appendMessage(message.from, message.content, message.type);
+
+                    // 处理单个消息或消息数组
+                    if (Array.isArray(messages)) {
+                        messages.forEach(handleMessage);
+                    } else {
+                        handleMessage(messages);
+                    }
                 } catch (error) {
-                    console.error('Error parsing message:', error);
-                    appendMessage('系统', '消息格式错误', 'error');
+                    console.error('Error handling message:', error);
+                    messageBuffer = ''; // 出错时清空缓冲
+                    appendMessage('系统', '消息处理错误', 'error');
                 }
             };
+
+            // 处理单个消息的函数
+            function handleMessage(message) {
+                if (message.type === 'ping') {
+                    sendPong();
+                    return;
+                }
+                appendMessage(message.from, message.content, message.type);
+            }
 
             ws.onclose = (event) => {
                 appendMessage('系统', `连接已断开 (code: ${event.code})`, 'system');
@@ -148,7 +174,7 @@
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     appendMessage('系统', `尝试第 ${reconnectAttempts} 次重新连接...`, 'system');
-                    setTimeout(connect, reconnectDelay * Math.min(reconnectAttempts, 3)); // 最大延迟3倍
+                    setTimeout(connect, reconnectDelay * Math.min(reconnectAttempts, 3));
                 } else {
                     appendMessage('系统', '重连次数超过限制，请刷新页面重试', 'error');
                 }
@@ -160,11 +186,47 @@
             };
         }
 
+        // 启动消息发送器
+        function startMessageSender() {
+            if (sendingInterval) {
+                clearInterval(sendingInterval);
+            }
+            sendingInterval = setInterval(processMessageQueue, 50); // 缩短处理间隔
+        }
+
+        // 处理消息队列
+        async function processMessageQueue() {
+            if (isProcessing || messageQueue.length === 0 || !ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+
+            isProcessing = true;
+            try {
+                const batch = messageQueue.splice(0, Math.min(batchSize, messageQueue.length));
+                for (const msg of batch) {
+                    try {
+                        ws.send(JSON.stringify(msg));
+                        // 添加小延迟，避免消息发送太快
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                    } catch (error) {
+                        console.error('Error sending message:', error);
+                        messageQueue.unshift(msg);
+                        break;
+                    }
+                }
+            } finally {
+                isProcessing = false;
+            }
+        }
+
         // 清理函数
         function cleanup() {
             stopHeartbeat();
+            if (sendingInterval) {
+                clearInterval(sendingInterval);
+                sendingInterval = null;
+            }
             if (ws) {
-                // 避免触发 onclose 事件的重连
                 const oldWs = ws;
                 ws = null;
                 try {
@@ -238,53 +300,54 @@
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
-            if (content && ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    const message = {
-                        type: 'chat',
-                        content: content,
-                        room: currentRoom
-                    };
-                    ws.send(JSON.stringify(message));
+            if (content) {
+                const message = {
+                    type: 'chat',
+                    content: content,
+                    room: currentRoom
+                };
+                
+                // 添加到消息队列
+                if (messageQueue.length < maxQueueSize) {
+                    messageQueue.push(message);
                     messageInput.value = '';
-                } catch (error) {
-                    appendMessage('系统', '发送消息失败: ' + error.message, 'error');
+                } else {
+                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
                 }
             }
         }
 
         function joinRoom(roomName, isReconnect = false) {
             const room = isReconnect ? roomName : document.getElementById('roomInput').value.trim();
-            if (room && ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    currentRoom = room;
-                    const message = {
-                        type: 'join_room',
-                        room: room
-                    };
-                    ws.send(JSON.stringify(message));
+            if (room) {
+                const message = {
+                    type: 'join_room',
+                    room: room
+                };
+                if (messageQueue.length < maxQueueSize) {
+                    messageQueue.push(message);
                     if (!isReconnect) {
+                        currentRoom = room;
                         document.getElementById('roomInput').value = room;
                     }
-                } catch (error) {
-                    appendMessage('系统', '加入房间失败: ' + error.message, 'error');
-                    currentRoom = '';
+                } else {
+                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
                 }
             }
         }
 
         function leaveRoom() {
-            if (currentRoom && ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    const message = {
-                        type: 'leave_room',
-                        room: currentRoom
-                    };
-                    ws.send(JSON.stringify(message));
+            if (currentRoom) {
+                const message = {
+                    type: 'leave_room',
+                    room: currentRoom
+                };
+                if (messageQueue.length < maxQueueSize) {
+                    messageQueue.push(message);
                     currentRoom = '';
                     document.getElementById('roomInput').value = '';
-                } catch (error) {
-                    appendMessage('系统', '离开房间失败: ' + error.message, 'error');
+                } else {
+                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
                 }
             }
         }
@@ -292,16 +355,16 @@
         function setUsername() {
             const usernameInput = document.getElementById('usernameInput');
             const username = usernameInput.value.trim();
-            if (username && ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    const message = {
-                        type: 'set_username',
-                        content: username
-                    };
-                    ws.send(JSON.stringify(message));
+            if (username) {
+                const message = {
+                    type: 'set_username',
+                    content: username
+                };
+                if (messageQueue.length < maxQueueSize) {
+                    messageQueue.push(message);
                     usernameInput.value = '';
-                } catch (error) {
-                    appendMessage('系统', '设置用户名失败: ' + error.message, 'error');
+                } else {
+                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
                 }
             }
         }
