@@ -315,3 +315,17 @@ func (c *Client) GetProperty(key string) (interface{}, bool) {
 	value, ok := c.Properties[key]
 	return value, ok
 }
+
+// GetClientGroups 获取客户端所在的所有群组
+func (p *Pool) GetClientGroups(clientID string) ([]string, error) {
+	p.groupsMu.RLock()
+	defer p.groupsMu.RUnlock()
+
+	groups := make([]string, 0)
+	for groupID, group := range p.groups {
+		if _, exists := group[clientID]; exists {
+			groups = append(groups, groupID)
+		}
+	}
+	return groups, nil
+}

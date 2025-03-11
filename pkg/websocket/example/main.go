@@ -28,6 +28,12 @@ func (h *ChatHandler) OnConnect(client *websocket.Client) {
 }
 
 func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Message) {
+	// 处理心跳响应消息
+	if message.Type == int(websocket.PongMessage) {
+		client.UpdatePing()
+		return
+	}
+
 	// 解析消息
 	var chatMsg ChatMessage
 	if err := json.Unmarshal(message.Content, &chatMsg); err != nil {
@@ -43,6 +49,12 @@ func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Mess
 				log.Printf("Error sending error message: %v", err)
 			}
 		}
+		return
+	}
+
+	// 处理心跳响应
+	if chatMsg.Type == "pong" {
+		client.UpdatePing()
 		return
 	}
 
@@ -160,12 +172,34 @@ func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Mess
 }
 
 func (h *ChatHandler) OnClose(client *websocket.Client) {
-	username, _ := client.GetProperty("username")
+	// 获取用户名
+	username, ok := client.GetProperty("username")
+	if !ok {
+		log.Printf("Client disconnected: %s", client.ID)
+		return
+	}
+
+	// 从所有房间中移除
+	groups, err := client.Pool.GetClientGroups(client.ID)
+	if err != nil {
+		log.Printf("Error getting client groups: %v", err)
+	} else {
+		for _, group := range groups {
+			if err := client.Pool.LeaveGroup(group, client.ID); err != nil {
+				log.Printf("Error leaving group %s: %v", group, err)
+			}
+		}
+	}
+
 	log.Printf("Client disconnected: %s (%s)", client.ID, username)
 }
 
 func (h *ChatHandler) OnError(client *websocket.Client, err error) {
-	username, _ := client.GetProperty("username")
+	username, ok := client.GetProperty("username")
+	if !ok {
+		log.Printf("Error from client %s: %v", client.ID, err)
+		return
+	}
 	log.Printf("Error from client %s (%s): %v", client.ID, username, err)
 }
 
@@ -181,15 +215,18 @@ func main() {
 	// 创建 WebSocket 配置
 	config := websocket.Config{
 		Handler:         &ChatHandler{},
-		PingTimeout:     60 * time.Second,
+		PingTimeout:     45 * time.Second, // 减少超时时间
 		WriteTimeout:    10 * time.Second,
 		ReadTimeout:     10 * time.Second,
 		BufferSize:      1024,
 		MessageBuffer:   256,
 		EnableHeartbeat: true,
-		HeartbeatPeriod: 30 * time.Second,
+		HeartbeatPeriod: 15 * time.Second, // 减少心跳间隔
 		Middlewares:     []websocket.MiddlewareFunc{loggingMiddleware},
 	}
+
+	// 设置静态文件服务
+	app.Static("/", "./example")
 
 	// 设置 WebSocket 路由
 	app.Get("/ws", websocket.New(config))

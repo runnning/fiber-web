@@ -95,28 +95,97 @@
     <script>
         let ws;
         let currentRoom = '';
+        let reconnectAttempts = 0;
+        let heartbeatInterval;
+        const maxReconnectAttempts = 5;
+        const reconnectDelay = 3000;
+        const heartbeatDelay = 10000; // 10秒发送一次心跳
 
         function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            // 如果存在旧连接，先清理
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
             ws = new WebSocket('ws://localhost:3000/ws');
 
             ws.onopen = () => {
                 appendMessage('系统', '连接成功', 'system');
+                reconnectAttempts = 0;
+                startHeartbeat();
+                // 重新加入房间
+                if (currentRoom) {
+                    joinRoom(currentRoom, true);
+                }
             };
 
             ws.onmessage = (event) => {
                 const message = JSON.parse(event.data);
+                // 处理心跳消息
+                if (message.type === 'ping') {
+                    sendPong();
+                    return;
+                }
                 appendMessage(message.from, message.content, message.type);
             };
 
-            ws.onclose = () => {
-                appendMessage('系统', '连接已断开', 'system');
-                // 尝试重新连接
-                setTimeout(connect, 3000);
+            ws.onclose = (event) => {
+                appendMessage('系统', `连接已断开 (code: ${event.code})`, 'system');
+                stopHeartbeat();
+                
+                // 重连逻辑
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    appendMessage('系统', `尝试第 ${reconnectAttempts} 次重新连接...`, 'system');
+                    setTimeout(connect, reconnectDelay * reconnectAttempts); // 递增重连延迟
+                } else {
+                    appendMessage('系统', '重连次数超过限制，请刷新页面重试', 'error');
+                }
             };
 
             ws.onerror = (error) => {
-                appendMessage('系统', '发生错误: ' + error.message, 'error');
+                appendMessage('系统', '发生错误: ' + (error.message || '未知错误'), 'error');
+                stopHeartbeat();
             };
+        }
+
+        // 开始心跳
+        function startHeartbeat() {
+            stopHeartbeat(); // 确保不会重复启动
+            heartbeatInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendPong();
+                } else {
+                    stopHeartbeat();
+                }
+            }, heartbeatDelay);
+        }
+
+        // 停止心跳
+        function stopHeartbeat() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+        }
+
+        // 发送心跳响应
+        function sendPong() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'pong'
+                    }));
+                } catch (error) {
+                    console.error('Error sending pong:', error);
+                    stopHeartbeat();
+                }
+            }
         }
 
         function appendMessage(from, content, type) {
@@ -126,57 +195,81 @@
             messageDiv.textContent = `${from}: ${content}`;
             chatArea.appendChild(messageDiv);
             chatArea.scrollTop = chatArea.scrollHeight;
+
+            // 限制消息数量，避免内存占用过大
+            while (chatArea.children.length > 200) {
+                chatArea.removeChild(chatArea.firstChild);
+            }
         }
 
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
-            if (content && ws.readyState === WebSocket.OPEN) {
-                const message = {
-                    type: 'chat',
-                    content: content,
-                    room: currentRoom
-                };
-                ws.send(JSON.stringify(message));
-                messageInput.value = '';
+            if (content && ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    const message = {
+                        type: 'chat',
+                        content: content,
+                        room: currentRoom
+                    };
+                    ws.send(JSON.stringify(message));
+                    messageInput.value = '';
+                } catch (error) {
+                    appendMessage('系统', '发送消息失败: ' + error.message, 'error');
+                }
             }
         }
 
-        function joinRoom() {
-            const roomInput = document.getElementById('roomInput');
-            const room = roomInput.value.trim();
-            if (room && ws.readyState === WebSocket.OPEN) {
-                currentRoom = room;
-                const message = {
-                    type: 'join_room',
-                    room: room
-                };
-                ws.send(JSON.stringify(message));
+        function joinRoom(roomName, isReconnect = false) {
+            const room = isReconnect ? roomName : document.getElementById('roomInput').value.trim();
+            if (room && ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    currentRoom = room;
+                    const message = {
+                        type: 'join_room',
+                        room: room
+                    };
+                    ws.send(JSON.stringify(message));
+                    if (!isReconnect) {
+                        document.getElementById('roomInput').value = room;
+                    }
+                } catch (error) {
+                    appendMessage('系统', '加入房间失败: ' + error.message, 'error');
+                    currentRoom = '';
+                }
             }
         }
 
         function leaveRoom() {
-            if (currentRoom && ws.readyState === WebSocket.OPEN) {
-                const message = {
-                    type: 'leave_room',
-                    room: currentRoom
-                };
-                ws.send(JSON.stringify(message));
-                currentRoom = '';
-                document.getElementById('roomInput').value = '';
+            if (currentRoom && ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    const message = {
+                        type: 'leave_room',
+                        room: currentRoom
+                    };
+                    ws.send(JSON.stringify(message));
+                    currentRoom = '';
+                    document.getElementById('roomInput').value = '';
+                } catch (error) {
+                    appendMessage('系统', '离开房间失败: ' + error.message, 'error');
+                }
             }
         }
 
         function setUsername() {
             const usernameInput = document.getElementById('usernameInput');
             const username = usernameInput.value.trim();
-            if (username && ws.readyState === WebSocket.OPEN) {
-                const message = {
-                    type: 'set_username',
-                    content: username
-                };
-                ws.send(JSON.stringify(message));
-                usernameInput.value = '';
+            if (username && ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    const message = {
+                        type: 'set_username',
+                        content: username
+                    };
+                    ws.send(JSON.stringify(message));
+                    usernameInput.value = '';
+                } catch (error) {
+                    appendMessage('系统', '设置用户名失败: ' + error.message, 'error');
+                }
             }
         }
 
@@ -189,6 +282,14 @@
 
         // 页面加载完成后连接WebSocket
         window.onload = connect;
+
+        // 页面关闭前清理
+        window.onbeforeunload = () => {
+            stopHeartbeat();
+            if (ws) {
+                ws.close();
+            }
+        };
     </script>
 </body>
 </html> 
