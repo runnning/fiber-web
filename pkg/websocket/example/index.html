@@ -97,9 +97,11 @@
         let currentRoom = '';
         let reconnectAttempts = 0;
         let heartbeatInterval;
+        let lastPongTime = Date.now();
         const maxReconnectAttempts = 5;
         const reconnectDelay = 3000;
-        const heartbeatDelay = 10000; // 10秒发送一次心跳
+        const heartbeatDelay = 5000;  // 5秒发送一次心跳
+        const heartbeatTimeout = 15000; // 15秒没有响应就认为断开
 
         function connect() {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -107,16 +109,14 @@
             }
 
             // 如果存在旧连接，先清理
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
+            cleanup();
 
             ws = new WebSocket('ws://localhost:3000/ws');
 
             ws.onopen = () => {
                 appendMessage('系统', '连接成功', 'system');
                 reconnectAttempts = 0;
+                lastPongTime = Date.now();
                 startHeartbeat();
                 // 重新加入房间
                 if (currentRoom) {
@@ -125,24 +125,30 @@
             };
 
             ws.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                // 处理心跳消息
-                if (message.type === 'ping') {
-                    sendPong();
-                    return;
+                lastPongTime = Date.now(); // 更新最后接收消息的时间
+                try {
+                    const message = JSON.parse(event.data);
+                    // 处理心跳消息
+                    if (message.type === 'ping') {
+                        sendPong();
+                        return;
+                    }
+                    appendMessage(message.from, message.content, message.type);
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                    appendMessage('系统', '消息格式错误', 'error');
                 }
-                appendMessage(message.from, message.content, message.type);
             };
 
             ws.onclose = (event) => {
                 appendMessage('系统', `连接已断开 (code: ${event.code})`, 'system');
-                stopHeartbeat();
+                cleanup();
                 
                 // 重连逻辑
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     appendMessage('系统', `尝试第 ${reconnectAttempts} 次重新连接...`, 'system');
-                    setTimeout(connect, reconnectDelay * reconnectAttempts); // 递增重连延迟
+                    setTimeout(connect, reconnectDelay * Math.min(reconnectAttempts, 3)); // 最大延迟3倍
                 } else {
                     appendMessage('系统', '重连次数超过限制，请刷新页面重试', 'error');
                 }
@@ -150,19 +156,43 @@
 
             ws.onerror = (error) => {
                 appendMessage('系统', '发生错误: ' + (error.message || '未知错误'), 'error');
-                stopHeartbeat();
+                cleanup();
             };
+        }
+
+        // 清理函数
+        function cleanup() {
+            stopHeartbeat();
+            if (ws) {
+                // 避免触发 onclose 事件的重连
+                const oldWs = ws;
+                ws = null;
+                try {
+                    oldWs.close();
+                } catch (error) {
+                    console.error('Error closing websocket:', error);
+                }
+            }
         }
 
         // 开始心跳
         function startHeartbeat() {
             stopHeartbeat(); // 确保不会重复启动
             heartbeatInterval = setInterval(() => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    sendPong();
-                } else {
-                    stopHeartbeat();
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    cleanup();
+                    return;
                 }
+
+                // 检查是否超时
+                if (Date.now() - lastPongTime > heartbeatTimeout) {
+                    appendMessage('系统', '心跳超时，正在重新连接...', 'system');
+                    cleanup();
+                    connect();
+                    return;
+                }
+
+                sendPong();
             }, heartbeatDelay);
         }
 
@@ -176,15 +206,18 @@
 
         // 发送心跳响应
         function sendPong() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    ws.send(JSON.stringify({
-                        type: 'pong'
-                    }));
-                } catch (error) {
-                    console.error('Error sending pong:', error);
-                    stopHeartbeat();
-                }
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+
+            try {
+                ws.send(JSON.stringify({
+                    type: 'pong'
+                }));
+            } catch (error) {
+                console.error('Error sending pong:', error);
+                cleanup();
+                connect();
             }
         }
 

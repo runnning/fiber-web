@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -204,33 +205,43 @@ func (h *ChatHandler) OnError(client *websocket.Client, err error) {
 }
 
 // 定义中间件
-func loggingMiddleware(client *websocket.Client, message websocket.Message) (websocket.Message, error) {
+func loggingMiddleware(ctx context.Context, client *websocket.Client, message websocket.Message) (websocket.Message, error) {
 	log.Printf("Message from %s: %s", client.ID, string(message.Content))
 	return message, nil
 }
 
 func main() {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ReadTimeout:  120 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  150 * time.Second,
+	})
 
 	// 创建 WebSocket 配置
 	config := websocket.Config{
 		Handler:         &ChatHandler{},
-		PingTimeout:     45 * time.Second, // 减少超时时间
-		WriteTimeout:    10 * time.Second,
-		ReadTimeout:     10 * time.Second,
+		PingTimeout:     120 * time.Second, // 心跳超时时间
+		WriteTimeout:    30 * time.Second,  // 写超时
+		ReadTimeout:     30 * time.Second,  // 读超时
 		BufferSize:      1024,
 		MessageBuffer:   256,
 		EnableHeartbeat: true,
-		HeartbeatPeriod: 15 * time.Second, // 减少心跳间隔
+		HeartbeatPeriod: 25 * time.Second, // 心跳间隔
+		EnableReconnect: true,             // 启用自动重连
+		MaxRetries:      3,                // 最大重试次数
+		RetryInterval:   5 * time.Second,  // 重试间隔
 		Middlewares:     []websocket.MiddlewareFunc{loggingMiddleware},
 	}
 
 	// 设置静态文件服务
-	app.Static("/", "./example")
+	//app.Static("/", "./example")
 
 	// 设置 WebSocket 路由
 	app.Get("/ws", websocket.New(config))
 
 	// 启动服务器
-	log.Fatal(app.Listen(":3000"))
+	log.Printf("Server starting on :3000")
+	if err := app.Listen(":3000"); err != nil {
+		log.Fatalf("Error starting server: %v", err)
+	}
 }

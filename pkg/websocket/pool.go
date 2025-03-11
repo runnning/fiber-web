@@ -3,6 +3,7 @@ package websocket
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -13,37 +14,36 @@ var (
 	ErrClientInGroup      = errors.New("client already in group")
 	ErrSendBufferFull     = errors.New("send buffer full")
 	ErrClientDisconnected = errors.New("client disconnected")
+	ErrInvalidGroupID     = errors.New("invalid group id")
+	ErrInvalidClientID    = errors.New("invalid client id")
 )
+
+// Group 表示一个WebSocket群组
+type Group struct {
+	ID      string
+	clients sync.Map
+	pool    *Pool
+}
 
 // run 启动连接池的管理循环
 func (p *Pool) run() {
 	for {
 		select {
 		case client := <-p.register:
-			p.mu.Lock()
-			p.clients[client.ID] = client
-			p.mu.Unlock()
+			p.clients.Store(client.ID, client)
 		case client := <-p.unregister:
-			p.mu.Lock()
-			if _, ok := p.clients[client.ID]; ok {
-				delete(p.clients, client.ID)
+			if _, ok := p.clients.LoadAndDelete(client.ID); ok {
 				close(client.send)
 				client.Close()
-			}
-			p.mu.Unlock()
 
-			// 从所有群组中移除
-			p.groupsMu.Lock()
-			for groupID, group := range p.groups {
-				if _, ok := group[client.ID]; ok {
-					delete(group, client.ID)
-					// 如果群组为空，删除群组
-					if len(group) == 0 {
-						delete(p.groups, groupID)
+				// 从所有群组中移除
+				p.groups.Range(func(key, value interface{}) bool {
+					if group, ok := value.(*Group); ok {
+						group.clients.Delete(client.ID)
 					}
-				}
+					return true
+				})
 			}
-			p.groupsMu.Unlock()
 		case message := <-p.broadcast:
 			p.broadcastMessage(message)
 		}
@@ -52,117 +52,125 @@ func (p *Pool) run() {
 
 // broadcastMessage 广播消息的具体实现
 func (p *Pool) broadcastMessage(message Message) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	start := time.Now()
 
 	// 如果指定了目标群组
 	if message.To != "" {
-		p.groupsMu.RLock()
-		group, ok := p.groups[message.To]
-		if !ok {
-			p.groupsMu.RUnlock()
-			return
-		}
-
-		failedClients := make([]string, 0)
-		for clientID, client := range group {
-			select {
-			case client.send <- message:
-			default:
-				failedClients = append(failedClients, clientID)
-			}
-		}
-		p.groupsMu.RUnlock()
-
-		// 处理发送失败的客户端
-		if len(failedClients) > 0 {
-			for _, clientID := range failedClients {
-				if client, ok := p.clients[clientID]; ok {
-					p.unregister <- client
+		if value, ok := p.groups.Load(message.To); ok {
+			group := value.(*Group)
+			group.clients.Range(func(key, value interface{}) bool {
+				if client, ok := value.(*Client); ok {
+					select {
+					case client.send <- message:
+					default:
+						p.unregister <- client
+					}
 				}
-			}
+				return true
+			})
 		}
 		return
 	}
 
 	// 广播给所有客户端
-	failedClients := make([]string, 0)
-	for clientID, client := range p.clients {
-		select {
-		case client.send <- message:
-		default:
-			failedClients = append(failedClients, clientID)
-		}
-	}
-
-	// 处理发送失败的客户端
-	if len(failedClients) > 0 {
-		for _, clientID := range failedClients {
-			if client, ok := p.clients[clientID]; ok {
+	p.clients.Range(func(key, value interface{}) bool {
+		if client, ok := value.(*Client); ok {
+			select {
+			case client.send <- message:
+			default:
 				p.unregister <- client
 			}
+		}
+		return true
+	})
+
+	// 更新广播延迟指标
+	if p.metrics != nil {
+		latency := time.Since(start).Microseconds()
+		currentAvg := p.metrics.AverageLatency.Load()
+		if currentAvg == 0 {
+			p.metrics.AverageLatency.Store(latency)
+		} else {
+			newAvg := (currentAvg + latency) / 2
+			p.metrics.AverageLatency.Store(newAvg)
 		}
 	}
 }
 
 // CreateGroup 创建一个新的群组
 func (p *Pool) CreateGroup(groupID string) error {
-	p.groupsMu.Lock()
-	defer p.groupsMu.Unlock()
+	if groupID == "" {
+		return ErrInvalidGroupID
+	}
 
-	if _, exists := p.groups[groupID]; exists {
+	group := &Group{
+		ID:   groupID,
+		pool: p,
+	}
+
+	if _, loaded := p.groups.LoadOrStore(groupID, group); loaded {
 		return fmt.Errorf("%w: %s", ErrGroupExists, groupID)
 	}
 
-	p.groups[groupID] = make(map[string]*Client)
 	return nil
 }
 
 // JoinGroup 将客户端加入群组
 func (p *Pool) JoinGroup(groupID string, clientID string) error {
-	p.groupsMu.Lock()
-	defer p.groupsMu.Unlock()
+	if groupID == "" {
+		return ErrInvalidGroupID
+	}
+	if clientID == "" {
+		return ErrInvalidClientID
+	}
 
-	group, ok := p.groups[groupID]
+	value, ok := p.groups.Load(groupID)
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrGroupNotFound, groupID)
 	}
+	group := value.(*Group)
 
-	if _, exists := group[clientID]; exists {
-		return fmt.Errorf("%w: client %s in group %s", ErrClientInGroup, clientID, groupID)
-	}
-
-	p.mu.RLock()
-	client, ok := p.clients[clientID]
-	p.mu.RUnlock()
-
+	clientValue, ok := p.clients.Load(clientID)
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrClientNotFound, clientID)
 	}
+	client := clientValue.(*Client)
 
-	group[clientID] = client
+	if _, loaded := group.clients.LoadOrStore(clientID, client); loaded {
+		return fmt.Errorf("%w: client %s in group %s", ErrClientInGroup, clientID, groupID)
+	}
+
 	return nil
 }
 
 // LeaveGroup 将客户端从群组中移除
 func (p *Pool) LeaveGroup(groupID string, clientID string) error {
-	p.groupsMu.Lock()
-	defer p.groupsMu.Unlock()
+	if groupID == "" {
+		return ErrInvalidGroupID
+	}
+	if clientID == "" {
+		return ErrInvalidClientID
+	}
 
-	group, ok := p.groups[groupID]
+	value, ok := p.groups.Load(groupID)
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrGroupNotFound, groupID)
 	}
+	group := value.(*Group)
 
-	if _, exists := group[clientID]; !exists {
+	if _, ok := group.clients.LoadAndDelete(clientID); !ok {
 		return fmt.Errorf("%w: %s", ErrClientNotFound, clientID)
 	}
 
-	delete(group, clientID)
+	// 检查群组是否为空
+	empty := true
+	group.clients.Range(func(key, value interface{}) bool {
+		empty = false
+		return false
+	})
 
-	// 如果群组为空，删除群组
-	if len(group) == 0 {
-		delete(p.groups, groupID)
+	if empty {
+		p.groups.Delete(groupID)
 	}
 
 	return nil
@@ -170,57 +178,67 @@ func (p *Pool) LeaveGroup(groupID string, clientID string) error {
 
 // DeleteGroup 删除一个群组
 func (p *Pool) DeleteGroup(groupID string) error {
-	p.groupsMu.Lock()
-	defer p.groupsMu.Unlock()
+	if groupID == "" {
+		return ErrInvalidGroupID
+	}
 
-	if _, exists := p.groups[groupID]; !exists {
+	if _, ok := p.groups.LoadAndDelete(groupID); !ok {
 		return fmt.Errorf("%w: %s", ErrGroupNotFound, groupID)
 	}
 
-	delete(p.groups, groupID)
 	return nil
 }
 
 // GetGroupMembers 获取群组成员
 func (p *Pool) GetGroupMembers(groupID string) ([]*Client, error) {
-	p.groupsMu.RLock()
-	defer p.groupsMu.RUnlock()
+	if groupID == "" {
+		return nil, ErrInvalidGroupID
+	}
 
-	group, ok := p.groups[groupID]
+	value, ok := p.groups.Load(groupID)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrGroupNotFound, groupID)
 	}
+	group := value.(*Group)
 
-	members := make([]*Client, 0, len(group))
-	for _, client := range group {
-		members = append(members, client)
-	}
+	var members []*Client
+	group.clients.Range(func(key, value interface{}) bool {
+		if client, ok := value.(*Client); ok {
+			members = append(members, client)
+		}
+		return true
+	})
+
 	return members, nil
 }
 
 // Broadcast 向所有连接的客户端广播消息
 func (p *Pool) Broadcast(messageType MessageType, content []byte) {
 	message := Message{
-		Type:    int(messageType),
-		Content: content,
+		Type:      int(messageType),
+		Content:   content,
+		Timestamp: time.Now(),
+		MessageID: fmt.Sprintf("broadcast-%d", time.Now().UnixNano()),
 	}
 	p.broadcast <- message
 }
 
 // BroadcastToGroup 向指定群组广播消息
 func (p *Pool) BroadcastToGroup(groupID string, messageType MessageType, content []byte) error {
-	p.groupsMu.RLock()
-	_, ok := p.groups[groupID]
-	p.groupsMu.RUnlock()
+	if groupID == "" {
+		return ErrInvalidGroupID
+	}
 
-	if !ok {
+	if _, ok := p.groups.Load(groupID); !ok {
 		return fmt.Errorf("%w: %s", ErrGroupNotFound, groupID)
 	}
 
 	message := Message{
-		Type:    int(messageType),
-		Content: content,
-		To:      groupID,
+		Type:      int(messageType),
+		Content:   content,
+		To:        groupID,
+		Timestamp: time.Now(),
+		MessageID: fmt.Sprintf("group-%s-%d", groupID, time.Now().UnixNano()),
 	}
 	p.broadcast <- message
 	return nil
@@ -228,44 +246,67 @@ func (p *Pool) BroadcastToGroup(groupID string, messageType MessageType, content
 
 // GetClient 根据ID获取客户端
 func (p *Pool) GetClient(id string) (*Client, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	client, ok := p.clients[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrClientNotFound, id)
+	if id == "" {
+		return nil, ErrInvalidClientID
 	}
-	return client, nil
+
+	if value, ok := p.clients.Load(id); ok {
+		return value.(*Client), nil
+	}
+	return nil, fmt.Errorf("%w: %s", ErrClientNotFound, id)
 }
 
 // Count 返回当前连接的客户端数量
 func (p *Pool) Count() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return len(p.clients)
+	var count int
+	p.clients.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // GroupCount 返回群组数量
 func (p *Pool) GroupCount() int {
-	p.groupsMu.RLock()
-	defer p.groupsMu.RUnlock()
-	return len(p.groups)
+	var count int
+	p.groups.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+	return count
+}
+
+// GetClientGroups 获取客户端所在的所有群组
+func (p *Pool) GetClientGroups(clientID string) ([]string, error) {
+	if clientID == "" {
+		return nil, ErrInvalidClientID
+	}
+
+	var groups []string
+	p.groups.Range(func(key, value interface{}) bool {
+		if group, ok := value.(*Group); ok {
+			if _, exists := group.clients.Load(clientID); exists {
+				groups = append(groups, group.ID)
+			}
+		}
+		return true
+	})
+
+	return groups, nil
 }
 
 // Send 发送消息到客户端
 func (c *Client) Send(messageType MessageType, content []byte) error {
-	c.mu.Lock()
-	closed := c.closed
-	c.mu.Unlock()
-
-	if closed {
+	if c.closed.Load() {
 		return ErrClientDisconnected
 	}
 
 	message := Message{
-		Type:    int(messageType),
-		Content: content,
-		From:    c.ID,
+		Type:      int(messageType),
+		Content:   content,
+		From:      c.ID,
+		Timestamp: time.Now(),
+		MessageID: fmt.Sprintf("%s-%d", c.ID, time.Now().UnixNano()),
 	}
 
 	select {
@@ -278,54 +319,72 @@ func (c *Client) Send(messageType MessageType, content []byte) error {
 
 // Close 关闭客户端连接
 func (c *Client) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.closed {
-		c.closed = true
-		_ = c.Conn.Close()
+	if !c.closed.CompareAndSwap(false, true) {
+		return
 	}
+
+	c.cancel()
+	c.mu.Lock()
+	if c.Conn != nil {
+		_ = c.Conn.Close()
+		c.Conn = nil
+	}
+	c.mu.Unlock()
 }
 
-// UpdatePing 更新最后一次心跳时间
+// UpdatePing 更新最后一次ping时间
 func (c *Client) UpdatePing() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.lastPing = time.Now()
+	c.lastPing.Store(time.Now())
 }
 
 // IsAlive 检查客户端是否存活
 func (c *Client) IsAlive(timeout time.Duration) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return time.Since(c.lastPing) < timeout
+	lastPing, _ := c.lastPing.Load().(time.Time)
+	return time.Since(lastPing) < timeout
 }
 
 // SetProperty 设置客户端属性
 func (c *Client) SetProperty(key string, value interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Properties[key] = value
+	c.Properties.Store(key, value)
 }
 
 // GetProperty 获取客户端属性
 func (c *Client) GetProperty(key string) (interface{}, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	value, ok := c.Properties[key]
-	return value, ok
+	return c.Properties.Load(key)
 }
 
-// GetClientGroups 获取客户端所在的所有群组
-func (p *Pool) GetClientGroups(clientID string) ([]string, error) {
-	p.groupsMu.RLock()
-	defer p.groupsMu.RUnlock()
-
-	groups := make([]string, 0)
-	for groupID, group := range p.groups {
-		if _, exists := group[clientID]; exists {
-			groups = append(groups, groupID)
-		}
+// SendToClient 发送消息到指定客户端
+func (p *Pool) SendToClient(targetID string, messageType MessageType, content []byte) error {
+	if targetID == "" {
+		return ErrInvalidClientID
 	}
-	return groups, nil
+
+	value, ok := p.clients.Load(targetID)
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrClientNotFound, targetID)
+	}
+	client := value.(*Client)
+
+	return client.Send(messageType, content)
+}
+
+// BroadcastFiltered 向满足条件的客户端广播消息
+func (p *Pool) BroadcastFiltered(messageType MessageType, content []byte, filter func(*Client) bool) {
+	message := Message{
+		Type:      int(messageType),
+		Content:   content,
+		Timestamp: time.Now(),
+		MessageID: fmt.Sprintf("filtered-%d", time.Now().UnixNano()),
+	}
+
+	p.clients.Range(func(key, value interface{}) bool {
+		if client, ok := value.(*Client); ok && filter(client) {
+			select {
+			case client.send <- message:
+			default:
+				p.unregister <- client
+			}
+		}
+		return true
+	})
 }
