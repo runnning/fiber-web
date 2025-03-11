@@ -36,16 +36,26 @@ func sendErrorMessage(client *websocket.Client, content string) {
 
 // 处理聊天消息
 func handleChatMessage(client *websocket.Client, chatMsg ChatMessage) {
+	// 直接发送给发送者，实现即时反馈
 	responseBytes, err := json.Marshal(chatMsg)
 	if err != nil {
 		log.Printf("Error marshaling chat message: %v", err)
 		return
 	}
-	if chatMsg.Room != "" {
-		client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes)
-	} else {
-		client.Pool.Broadcast(websocket.TextMessage, responseBytes)
+
+	// 立即发送给发送者
+	if err := client.Send(websocket.TextMessage, responseBytes); err != nil {
+		log.Printf("Error sending immediate feedback: %v", err)
 	}
+
+	// 异步处理广播
+	go func() {
+		if chatMsg.Room != "" {
+			client.Pool.BroadcastToGroup(chatMsg.Room, websocket.TextMessage, responseBytes)
+		} else {
+			client.Pool.Broadcast(websocket.TextMessage, responseBytes)
+		}
+	}()
 }
 
 // 处理加入房间
@@ -116,12 +126,14 @@ func (h *ChatHandler) OnConnect(client *websocket.Client) {
 func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Message) {
 	// 使用对象池来减少内存分配
 	var chatMsg ChatMessage
+
+	// 快速处理心跳响应
 	if message.Type == int(websocket.PongMessage) {
 		client.UpdatePing()
 		return
 	}
 
-	// 快速处理心跳响应
+	// 空消息快速返回
 	if len(message.Content) == 0 {
 		return
 	}
@@ -149,14 +161,14 @@ func (h *ChatHandler) OnMessage(client *websocket.Client, message websocket.Mess
 	// 根据消息类型处理
 	switch chatMsg.Type {
 	case "chat":
-		// 优先处理聊天消息
+		// 优先处理聊天消息，使用异步处理
 		handleChatMessage(client, chatMsg)
 	case "join_room":
-		handleJoinRoom(client, chatMsg, username.(string))
+		go handleJoinRoom(client, chatMsg, username.(string))
 	case "leave_room":
-		handleLeaveRoom(client, chatMsg, username.(string))
+		go handleLeaveRoom(client, chatMsg, username.(string))
 	case "set_username":
-		handleSetUsername(client, chatMsg, username.(string))
+		go handleSetUsername(client, chatMsg, username.(string))
 	default:
 		sendErrorMessage(client, "Unknown message type")
 	}
@@ -199,32 +211,34 @@ func loggingMiddleware(ctx context.Context, client *websocket.Client, message we
 
 func main() {
 	app := fiber.New(fiber.Config{
-		ReadTimeout:     60 * time.Second,
-		WriteTimeout:    60 * time.Second,
-		IdleTimeout:     75 * time.Second,
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
-		//DisableStartupMessage: true,
+		ReadTimeout:           30 * time.Second, // 减少超时时间
+		WriteTimeout:          30 * time.Second,
+		IdleTimeout:           45 * time.Second,
+		ReadBufferSize:        8192, // 增加缓冲区
+		WriteBufferSize:       8192,
+		DisableStartupMessage: true,
+		Prefork:               false, // 禁用预分叉
+		ReduceMemoryUsage:     true,  // 启用内存优化
 	})
 
 	// 创建 WebSocket 配置
 	config := websocket.Config{
 		Handler:         &ChatHandler{},
-		PingTimeout:     60 * time.Second,
-		WriteTimeout:    10 * time.Second,
-		ReadTimeout:     10 * time.Second,
-		BufferSize:      4096,
-		MessageBuffer:   1024,
+		PingTimeout:     30 * time.Second, // 减少超时时间
+		WriteTimeout:    5 * time.Second,  // 减少写超时
+		ReadTimeout:     5 * time.Second,  // 减少读超时
+		BufferSize:      8192,             // 增加缓冲区
+		MessageBuffer:   2048,             // 增加消息缓冲
 		EnableHeartbeat: true,
-		HeartbeatPeriod: 25 * time.Second,
+		HeartbeatPeriod: 15 * time.Second, // 减少心跳间隔
 		EnableReconnect: true,
 		MaxRetries:      3,
-		RetryInterval:   5 * time.Second,
+		RetryInterval:   3 * time.Second, // 减少重试间隔
 		Compression:     true,
 		MaxMessageSize:  32 << 20,
 		EnableMetrics:   true,
 		EnableRateLimit: true,
-		RateLimit:       200, // 增加速率限制
+		RateLimit:       500, // 增加速率限制
 		Middlewares:     []websocket.MiddlewareFunc{loggingMiddleware},
 	}
 
