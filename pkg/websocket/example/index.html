@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebSocket 聊天室</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
@@ -16,16 +16,56 @@
             margin: 0 auto;
             background-color: white;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             padding: 20px;
         }
         .chat-area {
             height: 400px;
             overflow-y: auto;
             border: 1px solid #ddd;
+            border-radius: 4px;
             padding: 10px;
             margin-bottom: 20px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
             border-radius: 4px;
+            max-width: 80%;
+            word-wrap: break-word;
+            position: relative;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.system {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            margin-left: auto;
+            margin-right: auto;
+            text-align: center;
+            max-width: 90%;
+            font-size: 0.9em;
+            padding: 4px 12px;
+        }
+        .message.self {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            border-radius: 15px 15px 0 15px;
+        }
+        .message.other {
+            background-color: #e9ecef;
+            color: #212529;
+            margin-right: auto;
+            border-radius: 15px 15px 15px 0;
+        }
+        .message .time {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 4px;
         }
         .input-area {
             display: flex;
@@ -34,9 +74,10 @@
         }
         input[type="text"] {
             flex: 1;
-            padding: 8px;
+            padding: 8px 12px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            font-size: 14px;
         }
         button {
             padding: 8px 16px;
@@ -45,29 +86,52 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
         }
         button:hover {
             background-color: #0056b3;
         }
-        .room-controls {
-            margin-bottom: 20px;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
         }
-        .message {
-            margin-bottom: 8px;
+        .room-list {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .room {
+            padding: 6px 12px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .room:hover {
+            background-color: #dee2e6;
+        }
+        .room.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .status {
+            margin-bottom: 10px;
             padding: 8px;
             border-radius: 4px;
+            text-align: center;
+            font-weight: 500;
         }
-        .system {
-            background-color: #f8f9fa;
-            color: #666;
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
         }
-        .chat {
-            background-color: #e9ecef;
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
         }
-        .error {
+        .status.connecting {
             background-color: #fff3cd;
             color: #856404;
         }
@@ -75,317 +139,372 @@
 </head>
 <body>
     <div class="container">
-        <h1>WebSocket 聊天室</h1>
-        <div class="room-controls">
-            <input type="text" id="roomInput" placeholder="输入房间名称">
-            <button onclick="joinRoom()">加入房间</button>
-            <button onclick="leaveRoom()">离开房间</button>
+        <div id="status" class="status disconnected">未连接</div>
+        <div class="room-list" id="roomList">
+            <div class="room active" data-room="">大厅</div>
+            <div class="room" data-room="room1">房间1</div>
+            <div class="room" data-room="room2">房间2</div>
         </div>
         <div class="chat-area" id="chatArea"></div>
         <div class="input-area">
-            <input type="text" id="messageInput" placeholder="输入消息">
-            <button onclick="sendMessage()">发送</button>
-        </div>
-        <div class="input-area">
-            <input type="text" id="usernameInput" placeholder="输入新用户名">
-            <button onclick="setUsername()">修改用户名</button>
+            <input type="text" id="messageInput" placeholder="输入消息..." disabled>
+            <button id="sendButton" disabled>发送</button>
         </div>
     </div>
 
     <script>
-        let ws;
-        let currentRoom = '';
-        let reconnectAttempts = 0;
-        let heartbeatInterval;
-        let lastPongTime = Date.now();
-        const maxReconnectAttempts = 5;
-        const reconnectDelay = 3000;
-        const heartbeatDelay = 15000;
-        const heartbeatTimeout = 30000;
-        const messageQueue = [];
-        const maxQueueSize = 50;       // 减小队列大小，避免消息堆积
-        const batchSize = 5;           // 减小批量发送大小，提高响应速度
-        let sendingInterval;
-        let isProcessing = false;      // 添加处理标志
+        class WebSocketClient {
+            constructor() {
+                this.ws = null;
+                this.currentRoom = '';
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 3;
+                this.reconnectDelay = 5000;
+                this.lastPingTime = Date.now();
+                this.pingInterval = null;
+                this.messageQueue = [];
+                this.displayedMessages = null;
 
-        function connect() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                return;
+                this.connect();
+                this.setupEventListeners();
             }
 
-            cleanup();
+            connect() {
+                this.updateStatus('connecting', '正在连接...');
 
-            ws = new WebSocket('ws://localhost:3000/ws');
-            ws.binaryType = 'arraybuffer'; // 设置二进制类型，提高传输效率
-
-            ws.onopen = () => {
-                appendMessage('系统', '连接成功', 'system');
-                reconnectAttempts = 0;
-                lastPongTime = Date.now();
-                startHeartbeat();
-                startMessageSender();
-                if (currentRoom) {
-                    joinRoom(currentRoom, true);
+                // 清理之前的连接
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
                 }
-            };
 
-            let messageBuffer = ''; // 添加消息缓冲
-            ws.onmessage = (event) => {
-                lastPongTime = Date.now();
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                console.log('Connecting to WebSocket:', wsUrl);
+
                 try {
-                    // 处理消息缓冲
-                    messageBuffer += event.data;
-                    let messages;
-                    try {
-                        messages = JSON.parse(messageBuffer);
-                        messageBuffer = ''; // 清空缓冲
-                    } catch (e) {
-                        // 如果解析失败，可能是消息不完整，继续等待
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    // 设置二进制类型为 blob
+                    this.ws.binaryType = 'blob';
+                    
+                    // 添加事件监听器
+                    this.ws.onopen = (event) => {
+                        console.log('WebSocket connected:', event);
+                        this.onOpen();
+                    };
+                    
+                    this.ws.onclose = (event) => {
+                        console.log('WebSocket closed:', event);
+                        this.onClose();
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        console.log('WebSocket message received:', event);
+                        this.onMessage(event);
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.onError(error);
+                    };
+
+                    // 设置连接超时
+                    this.connectTimeout = setTimeout(() => {
+                        if (this.ws.readyState !== WebSocket.OPEN) {
+                            console.error('WebSocket connection timeout');
+                            this.ws.close();
+                        }
+                    }, 5000);
+                } catch (error) {
+                    console.error('Error creating WebSocket:', error);
+                    this.updateStatus('disconnected', '连接失败：' + error.message);
+                }
+            }
+
+            onOpen() {
+                console.log('WebSocket connection established');
+                clearTimeout(this.connectTimeout);
+                this.updateStatus('connected', '已连接');
+                this.reconnectAttempts = 0;
+                this.enableInputs();
+                this.startPing();
+                this.flushMessageQueue();
+
+                // 如果有房间，重新加入
+                if (this.currentRoom) {
+                    console.log('Rejoining room:', this.currentRoom);
+                    this.joinRoom(this.currentRoom);
+                }
+            }
+
+            onClose() {
+                console.log('WebSocket connection closed');
+                clearTimeout(this.connectTimeout);
+                this.updateStatus('disconnected', '连接断开');
+                this.disableInputs();
+                this.stopPing();
+
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+                    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+                    this.updateStatus('connecting', `正在尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                    setTimeout(() => this.connect(), delay);
+                } else {
+                    console.log('Max reconnection attempts reached');
+                    this.updateStatus('disconnected', '重连失败，请刷新页面重试');
+                }
+            }
+
+            onMessage(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('Received message:', message);
+                    this.lastPingTime = Date.now();
+
+                    if (message.event === 'pong') {
                         return;
                     }
 
-                    // 处理单个消息或消息数组
-                    if (Array.isArray(messages)) {
-                        messages.forEach(handleMessage);
-                    } else {
-                        handleMessage(messages);
+                    // 检查消息是否已经显示过
+                    const messageId = `${message.time}-${message.from}-${message.data}`;
+                    if (this.displayedMessages && this.displayedMessages.has(messageId)) {
+                        console.log('Duplicate message detected:', messageId);
+                        return;
                     }
+
+                    // 记录已显示的消息
+                    if (!this.displayedMessages) {
+                        this.displayedMessages = new Set();
+                    }
+                    this.displayedMessages.add(messageId);
+
+                    // 限制已显示消息的记录数量
+                    if (this.displayedMessages.size > 1000) {
+                        const oldestMessages = Array.from(this.displayedMessages).slice(0, 500);
+                        this.displayedMessages = new Set(oldestMessages);
+                    }
+
+                    this.displayMessage(message);
                 } catch (error) {
-                    console.error('Error handling message:', error);
-                    messageBuffer = ''; // 出错时清空缓冲
-                    appendMessage('系统', '消息处理错误', 'error');
+                    console.error('Error parsing message:', error);
                 }
-            };
-
-            // 处理单个消息的函数
-            function handleMessage(message) {
-                if (message.type === 'ping') {
-                    sendPong();
-                    return;
-                }
-                appendMessage(message.from, message.content, message.type);
             }
 
-            ws.onclose = (event) => {
-                appendMessage('系统', `连接已断开 (code: ${event.code})`, 'system');
-                cleanup();
-                
-                // 重连逻辑
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    reconnectAttempts++;
-                    appendMessage('系统', `尝试第 ${reconnectAttempts} 次重新连接...`, 'system');
-                    setTimeout(connect, reconnectDelay * Math.min(reconnectAttempts, 3));
+            onError(error) {
+                console.error('WebSocket error:', error);
+            }
+
+            startPing() {
+                this.stopPing();
+                this.pingInterval = setInterval(() => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.sendMessage({
+                            type: 1,
+                            event: 'ping',
+                            time: new Date()
+                        });
+                    }
+                }, 30000);
+            }
+
+            stopPing() {
+                if (this.pingInterval) {
+                    clearInterval(this.pingInterval);
+                    this.pingInterval = null;
+                }
+            }
+
+            sendMessage(message) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(message));
+                    return true;
                 } else {
-                    appendMessage('系统', '重连次数超过限制，请刷新页面重试', 'error');
+                    this.messageQueue.push(message);
+                    return false;
                 }
-            };
-
-            ws.onerror = (error) => {
-                appendMessage('系统', '发生错误: ' + (error.message || '未知错误'), 'error');
-                cleanup();
-            };
-        }
-
-        // 启动消息发送器
-        function startMessageSender() {
-            if (sendingInterval) {
-                clearInterval(sendingInterval);
-            }
-            sendingInterval = setInterval(processMessageQueue, 50); // 缩短处理间隔
-        }
-
-        // 处理消息队列
-        async function processMessageQueue() {
-            if (isProcessing || messageQueue.length === 0 || !ws || ws.readyState !== WebSocket.OPEN) {
-                return;
             }
 
-            isProcessing = true;
-            try {
-                const batch = messageQueue.splice(0, Math.min(batchSize, messageQueue.length));
-                for (const msg of batch) {
-                    try {
-                        ws.send(JSON.stringify(msg));
-                        // 添加小延迟，避免消息发送太快
-                        await new Promise(resolve => setTimeout(resolve, 10));
-                    } catch (error) {
-                        console.error('Error sending message:', error);
-                        messageQueue.unshift(msg);
-                        break;
+            flushMessageQueue() {
+                while (this.messageQueue.length > 0) {
+                    const message = this.messageQueue.shift();
+                    this.sendMessage(message);
+                }
+            }
+
+            displayMessage(message) {
+                const chatArea = document.getElementById('chatArea');
+                const messageDiv = document.createElement('div');
+
+                if (message.event === 'error') {
+                    messageDiv.className = 'message system';
+                    messageDiv.textContent = `错误: ${message.error}`;
+                } else if (message.event === 'system') {
+                    messageDiv.className = 'message system';
+                    messageDiv.textContent = message.data;
+                } else {
+                    const isCurrentUser = message.from === this.ws.id;
+                    messageDiv.className = `message ${isCurrentUser ? 'self' : 'other'}`;
+
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'content';
+                    contentDiv.textContent = message.data;
+                    messageDiv.appendChild(contentDiv);
+
+                    const timeDiv = document.createElement('div');
+                    timeDiv.className = 'time';
+                    timeDiv.textContent = new Date(message.time).toLocaleTimeString();
+                    messageDiv.appendChild(timeDiv);
+                }
+
+                chatArea.appendChild(messageDiv);
+                chatArea.scrollTop = chatArea.scrollHeight;
+
+                // 限制消息数量
+                while (chatArea.children.length > 200) {
+                    chatArea.removeChild(chatArea.firstChild);
+                }
+
+                // 如果窗口不在焦点，发送通知
+                if (!document.hasFocus()) {
+                    this.sendNotification(message);
+                }
+            }
+
+            sendNotification(message) {
+                if (!("Notification" in window)) return;
+
+                if (Notification.permission === "granted") {
+                    this.createNotification(message);
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            this.createNotification(message);
+                        }
+                    });
+                }
+            }
+
+            createNotification(message) {
+                const title = message.event === 'system' ? '系统消息' : `来自 ${message.from} 的消息`;
+                const notification = new Notification(title, {
+                    body: message.data,
+                    icon: '/favicon.ico'
+                });
+
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+
+                setTimeout(() => notification.close(), 5000);
+            }
+
+            setupEventListeners() {
+                const messageInput = document.getElementById('messageInput');
+                const sendButton = document.getElementById('sendButton');
+                const roomList = document.getElementById('roomList');
+
+                messageInput.addEventListener('keypress', (event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        this.sendChatMessage();
+                    }
+                });
+
+                sendButton.addEventListener('click', () => {
+                    this.sendChatMessage();
+                });
+
+                roomList.addEventListener('click', (event) => {
+                    const roomElement = event.target.closest('.room');
+                    if (roomElement) {
+                        this.changeRoom(roomElement.dataset.room);
+                    }
+                });
+            }
+
+            sendChatMessage() {
+                const messageInput = document.getElementById('messageInput');
+                const content = messageInput.value.trim();
+
+                if (content) {
+                    const message = {
+                        type: 1,
+                        event: 'chat',
+                        data: content,
+                        room_id: this.currentRoom,
+                        time: new Date()
+                    };
+
+                    // 只发送消息，不在本地显示
+                    // 等待服务器的广播消息再显示
+                    if (this.sendMessage(message)) {
+                        messageInput.value = '';
                     }
                 }
-            } finally {
-                isProcessing = false;
             }
-        }
 
-        // 清理函数
-        function cleanup() {
-            stopHeartbeat();
-            if (sendingInterval) {
-                clearInterval(sendingInterval);
-                sendingInterval = null;
-            }
-            if (ws) {
-                const oldWs = ws;
-                ws = null;
-                try {
-                    oldWs.close();
-                } catch (error) {
-                    console.error('Error closing websocket:', error);
-                }
-            }
-        }
+            changeRoom(newRoom) {
+                if (this.currentRoom === newRoom) return;
 
-        // 开始心跳
-        function startHeartbeat() {
-            stopHeartbeat(); // 确保不会重复启动
-            heartbeatInterval = setInterval(() => {
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    cleanup();
-                    return;
+                // 离开当前房间
+                if (this.currentRoom) {
+                    this.sendMessage({
+                        type: 1,
+                        event: 'leave_room',
+                        data: this.currentRoom,
+                        time: new Date()
+                    });
                 }
 
-                // 检查是否超时
-                if (Date.now() - lastPongTime > heartbeatTimeout) {
-                    appendMessage('系统', '心跳超时，正在重新连接...', 'system');
-                    cleanup();
-                    connect();
-                    return;
+                this.currentRoom = newRoom;
+                document.querySelectorAll('.room').forEach(room => {
+                    room.classList.toggle('active', room.dataset.room === newRoom);
+                });
+
+                // 加入新房间
+                if (newRoom) {
+                    this.sendMessage({
+                        type: 1,
+                        event: 'join_room',
+                        data: newRoom,
+                        time: new Date()
+                    });
                 }
 
-                sendPong();
-            }, heartbeatDelay);
-        }
+                // 清空聊天区域
+                const chatArea = document.getElementById('chatArea');
+                chatArea.innerHTML = '';
 
-        // 停止心跳
-        function stopHeartbeat() {
-            if (heartbeatInterval) {
-                clearInterval(heartbeatInterval);
-                heartbeatInterval = null;
+                // 添加房间切换提示
+                this.displayMessage({
+                    event: 'system',
+                    data: newRoom ? `已加入房间: ${newRoom}` : '已返回大厅',
+                    time: new Date()
+                });
+            }
+
+            updateStatus(state, message) {
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = `status ${state}`;
+                statusDiv.textContent = message;
+            }
+
+            enableInputs() {
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+            }
+
+            disableInputs() {
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendButton').disabled = true;
             }
         }
 
-        // 发送心跳响应
-        function sendPong() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                return;
-            }
-
-            try {
-                ws.send(JSON.stringify({
-                    type: 'pong'
-                }));
-            } catch (error) {
-                console.error('Error sending pong:', error);
-                cleanup();
-                connect();
-            }
-        }
-
-        function appendMessage(from, content, type) {
-            const chatArea = document.getElementById('chatArea');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}`;
-            messageDiv.textContent = `${from}: ${content}`;
-            chatArea.appendChild(messageDiv);
-            chatArea.scrollTop = chatArea.scrollHeight;
-
-            // 限制消息数量，避免内存占用过大
-            while (chatArea.children.length > 200) {
-                chatArea.removeChild(chatArea.firstChild);
-            }
-        }
-
-        function sendMessage() {
-            const messageInput = document.getElementById('messageInput');
-            const content = messageInput.value.trim();
-            if (content) {
-                const message = {
-                    type: 'chat',
-                    content: content,
-                    room: currentRoom
-                };
-                
-                // 添加到消息队列
-                if (messageQueue.length < maxQueueSize) {
-                    messageQueue.push(message);
-                    messageInput.value = '';
-                } else {
-                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
-                }
-            }
-        }
-
-        function joinRoom(roomName, isReconnect = false) {
-            const room = isReconnect ? roomName : document.getElementById('roomInput').value.trim();
-            if (room) {
-                const message = {
-                    type: 'join_room',
-                    room: room
-                };
-                if (messageQueue.length < maxQueueSize) {
-                    messageQueue.push(message);
-                    if (!isReconnect) {
-                        currentRoom = room;
-                        document.getElementById('roomInput').value = room;
-                    }
-                } else {
-                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
-                }
-            }
-        }
-
-        function leaveRoom() {
-            if (currentRoom) {
-                const message = {
-                    type: 'leave_room',
-                    room: currentRoom
-                };
-                if (messageQueue.length < maxQueueSize) {
-                    messageQueue.push(message);
-                    currentRoom = '';
-                    document.getElementById('roomInput').value = '';
-                } else {
-                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
-                }
-            }
-        }
-
-        function setUsername() {
-            const usernameInput = document.getElementById('usernameInput');
-            const username = usernameInput.value.trim();
-            if (username) {
-                const message = {
-                    type: 'set_username',
-                    content: username
-                };
-                if (messageQueue.length < maxQueueSize) {
-                    messageQueue.push(message);
-                    usernameInput.value = '';
-                } else {
-                    appendMessage('系统', '消息队列已满，请稍后再试', 'error');
-                }
-            }
-        }
-
-        // 添加回车键发送消息的功能
-        document.getElementById('messageInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-
-        // 页面加载完成后连接WebSocket
-        window.onload = connect;
-
-        // 页面关闭前清理
-        window.onbeforeunload = () => {
-            stopHeartbeat();
-            if (ws) {
-                ws.close();
-            }
-        };
+        // 初始化 WebSocket 客户端
+        const client = new WebSocketClient();
     </script>
 </body>
 </html> 
