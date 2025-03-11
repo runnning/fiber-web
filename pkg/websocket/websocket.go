@@ -22,11 +22,11 @@ const (
 
 // Message 定义消息结构
 type Message struct {
-	Type    int                    `json:"type"`
-	Content []byte                 `json:"content"`
-	From    string                 `json:"from,omitempty"`
-	To      string                 `json:"to,omitempty"`
-	Extra   map[string]interface{} `json:"extra,omitempty"`
+	Type    int            `json:"type"`
+	Content []byte         `json:"content"`
+	From    string         `json:"from,omitempty"`
+	To      string         `json:"to,omitempty"`
+	Extra   map[string]any `json:"extra,omitempty"`
 }
 
 // Client 表示一个WebSocket客户端连接
@@ -37,8 +37,8 @@ type Client struct {
 	mu         sync.Mutex
 	closed     bool
 	lastPing   time.Time
-	Properties map[string]interface{} // 用于存储自定义属性
-	send       chan Message           // 发送消息的通道
+	Properties map[string]any // 用于存储自定义属性
+	send       chan Message   // 发送消息的通道
 }
 
 // Pool 管理所有websocket连接
