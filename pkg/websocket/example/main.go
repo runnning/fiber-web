@@ -191,9 +191,6 @@ func main() {
 		Middlewares:     []websocket.MiddlewareFunc{loggingMiddleware},
 	}
 
-	// 设置静态文件服务
-	app.Static("/", "./example")
-
 	// 设置 WebSocket 路由
 	app.Get("/ws", websocket.New(config))
 

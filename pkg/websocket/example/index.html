@@ -1,148 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-    <title>WebSocket 聊天示例</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 聊天室</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
         .container {
-            display: flex;
-            flex: 1;
-            gap: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
         }
-        .sidebar {
-            width: 200px;
-            border: 1px solid #ccc;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        #messages {
-            flex: 1;
-            border: 1px solid #ccc;
-            margin-bottom: 10px;
-            padding: 10px;
+        .chat-area {
+            height: 400px;
             overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
         }
-        #messageForm {
+        .input-area {
             display: flex;
             gap: 10px;
+            margin-bottom: 20px;
         }
-        input, button {
-            padding: 8px;
-        }
-        input {
+        input[type="text"] {
             flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         button {
-            background-color: #4CAF50;
+            padding: 8px 16px;
+            background-color: #007bff;
             color: white;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
-            padding: 8px 15px;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #0056b3;
         }
-        .room {
-            padding: 5px 10px;
-            background-color: #f0f0f0;
-            cursor: pointer;
+        .room-controls {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
             border-radius: 4px;
-        }
-        .room.active {
-            background-color: #4CAF50;
-            color: white;
         }
         .message {
-            margin: 5px 0;
-            padding: 5px;
+            margin-bottom: 8px;
+            padding: 8px;
             border-radius: 4px;
         }
-        .message.system {
-            background-color: #f0f0f0;
+        .system {
+            background-color: #f8f9fa;
             color: #666;
         }
-        .username {
-            font-weight: bold;
-            color: #4CAF50;
+        .chat {
+            background-color: #e9ecef;
+        }
+        .error {
+            background-color: #fff3cd;
+            color: #856404;
         }
     </style>
 </head>
 <body>
-    <h2>WebSocket 聊天室</h2>
     <div class="container">
-        <div class="sidebar">
-            <input type="text" id="usernameInput" placeholder="设置用户名...">
-            <button onclick="setUsername()">更新用户名</button>
-            <hr>
-            <input type="text" id="roomInput" placeholder="房间名称...">
-            <button onclick="createRoom()">创建/加入房间</button>
-            <div id="roomList">
-                <!-- 房间列表 -->
-            </div>
+        <h1>WebSocket 聊天室</h1>
+        <div class="room-controls">
+            <input type="text" id="roomInput" placeholder="输入房间名称">
+            <button onclick="joinRoom()">加入房间</button>
+            <button onclick="leaveRoom()">离开房间</button>
         </div>
-        <div class="main">
-            <div id="messages"></div>
-            <form id="messageForm">
-                <input type="text" id="messageInput" placeholder="输入消息..." autocomplete="off">
-                <button type="submit">发送</button>
-            </form>
+        <div class="chat-area" id="chatArea"></div>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="输入消息">
+            <button onclick="sendMessage()">发送</button>
+        </div>
+        <div class="input-area">
+            <input type="text" id="usernameInput" placeholder="输入新用户名">
+            <button onclick="setUsername()">修改用户名</button>
         </div>
     </div>
 
     <script>
-        const messagesDiv = document.getElementById('messages');
-        const messageForm = document.getElementById('messageForm');
-        const messageInput = document.getElementById('messageInput');
-        const usernameInput = document.getElementById('usernameInput');
-        const roomInput = document.getElementById('roomInput');
-        const roomList = document.getElementById('roomList');
-
+        let ws;
         let currentRoom = '';
-        const rooms = new Set();
 
-        // 连接WebSocket
-        const ws = new WebSocket('ws://localhost:3000/ws');
+        function connect() {
+            ws = new WebSocket('ws://localhost:3000/ws');
 
-        ws.onopen = () => {
-            appendMessage('系统', '已连接到服务器');
-        };
+            ws.onopen = () => {
+                appendMessage('系统', '连接成功', 'system');
+            };
 
-        ws.onclose = () => {
-            appendMessage('系统', '与服务器断开连接');
-        };
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                appendMessage(message.from, message.content, message.type);
+            };
 
-        ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            if (message.type === 'system') {
-                appendMessage('系统', message.content, true);
-            } else {
-                appendMessage(message.from, message.content);
-            }
-        };
+            ws.onclose = () => {
+                appendMessage('系统', '连接已断开', 'system');
+                // 尝试重新连接
+                setTimeout(connect, 3000);
+            };
 
-        ws.onerror = (error) => {
-            appendMessage('错误', '连接错误', true);
-            console.error('WebSocket error:', error);
-        };
+            ws.onerror = (error) => {
+                appendMessage('系统', '发生错误: ' + error.message, 'error');
+            };
+        }
 
-        messageForm.onsubmit = (e) => {
-            e.preventDefault();
+        function appendMessage(from, content, type) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = `${from}: ${content}`;
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
-            if (content) {
+            if (content && ws.readyState === WebSocket.OPEN) {
                 const message = {
                     type: 'chat',
                     content: content,
@@ -151,11 +140,37 @@
                 ws.send(JSON.stringify(message));
                 messageInput.value = '';
             }
-        };
+        }
+
+        function joinRoom() {
+            const roomInput = document.getElementById('roomInput');
+            const room = roomInput.value.trim();
+            if (room && ws.readyState === WebSocket.OPEN) {
+                currentRoom = room;
+                const message = {
+                    type: 'join_room',
+                    room: room
+                };
+                ws.send(JSON.stringify(message));
+            }
+        }
+
+        function leaveRoom() {
+            if (currentRoom && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'leave_room',
+                    room: currentRoom
+                };
+                ws.send(JSON.stringify(message));
+                currentRoom = '';
+                document.getElementById('roomInput').value = '';
+            }
+        }
 
         function setUsername() {
+            const usernameInput = document.getElementById('usernameInput');
             const username = usernameInput.value.trim();
-            if (username) {
+            if (username && ws.readyState === WebSocket.OPEN) {
                 const message = {
                     type: 'set_username',
                     content: username
@@ -165,85 +180,15 @@
             }
         }
 
-        function createRoom() {
-            const roomName = roomInput.value.trim();
-            if (roomName) {
-                if (currentRoom) {
-                    // 离开当前房间
-                    ws.send(JSON.stringify({
-                        type: 'leave_room',
-                        room: currentRoom
-                    }));
-                }
-                // 加入新房间
-                ws.send(JSON.stringify({
-                    type: 'join_room',
-                    room: roomName
-                }));
-                currentRoom = roomName;
-                if (!rooms.has(roomName)) {
-                    rooms.add(roomName);
-                    updateRoomList();
-                }
-                roomInput.value = '';
-                updateActiveRoom();
+        // 添加回车键发送消息的功能
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
             }
-        }
+        });
 
-        function joinRoom(roomName) {
-            if (currentRoom === roomName) return;
-            
-            if (currentRoom) {
-                ws.send(JSON.stringify({
-                    type: 'leave_room',
-                    room: currentRoom
-                }));
-            }
-            
-            ws.send(JSON.stringify({
-                type: 'join_room',
-                room: roomName
-            }));
-            
-            currentRoom = roomName;
-            updateActiveRoom();
-        }
-
-        function updateRoomList() {
-            roomList.innerHTML = '';
-            rooms.forEach(room => {
-                const div = document.createElement('div');
-                div.className = `room ${room === currentRoom ? 'active' : ''}`;
-                div.textContent = room;
-                div.onclick = () => joinRoom(room);
-                roomList.appendChild(div);
-            });
-        }
-
-        function updateActiveRoom() {
-            document.querySelectorAll('.room').forEach(room => {
-                room.classList.toggle('active', room.textContent === currentRoom);
-            });
-        }
-
-        function appendMessage(from, content, isSystem = false) {
-            const messageElement = document.createElement('div');
-            messageElement.className = `message ${isSystem ? 'system' : ''}`;
-            
-            if (isSystem) {
-                messageElement.textContent = `[${from}] ${content}`;
-            } else {
-                const username = document.createElement('span');
-                username.className = 'username';
-                username.textContent = from;
-                
-                messageElement.appendChild(username);
-                messageElement.appendChild(document.createTextNode(`: ${content}`));
-            }
-            
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
+        // 页面加载完成后连接WebSocket
+        window.onload = connect;
     </script>
 </body>
 </html> 
