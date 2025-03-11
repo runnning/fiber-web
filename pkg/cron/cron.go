@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fiber_web/pkg/logger"
+	"fmt"
 	"sync"
 	"time"
 
@@ -22,6 +23,45 @@ const (
 
 // TaskFunc 定时任务函数类型
 type TaskFunc func(ctx context.Context) error
+
+// Schedule 定时任务调度配置
+type Schedule interface {
+	ToCron() string
+}
+
+// ScheduleCron 原始cron表达式
+type ScheduleCron string
+
+func (c ScheduleCron) ToCron() string {
+	return string(c)
+}
+
+// TimeSchedule 具体时间点
+type TimeSchedule struct {
+	Second  string // 秒 (0-59)
+	Minute  string // 分 (0-59)
+	Hour    string // 时 (0-23)
+	Day     string // 日 (1-31)
+	Month   string // 月 (1-12)
+	Weekday string // 星期 (0-6)
+}
+
+func (t TimeSchedule) ToCron() string {
+	return fmt.Sprintf("%s %s %s %s %s %s",
+		t.Second,
+		t.Minute,
+		t.Hour,
+		t.Day,
+		t.Month,
+		t.Weekday)
+}
+
+// IntervalSchedule 时间间隔
+type IntervalSchedule time.Duration
+
+func (i IntervalSchedule) ToCron() string {
+	return fmt.Sprintf("@every %s", time.Duration(i).String())
+}
 
 // Task 定时任务结构
 type Task struct {
@@ -222,4 +262,9 @@ func (s *Scheduler) StopTask(name string) error {
 	task.Status = TaskStatusStopped
 
 	return nil
+}
+
+// AddTaskWithSchedule 使用Schedule配置添加定时任务
+func (s *Scheduler) AddTaskWithSchedule(name string, schedule Schedule, f TaskFunc, timeout time.Duration) error {
+	return s.AddTask(name, schedule.ToCron(), f, timeout)
 }
