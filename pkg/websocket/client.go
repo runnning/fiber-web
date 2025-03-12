@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gofiber/fiber/v2/utils"
 	"log"
 	"sync"
 	"time"
@@ -14,7 +15,7 @@ import (
 // NewClient 创建新的客户端实例
 func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 	return &Client{
-		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
+		ID:    utils.UUID(),
 		Conn:  conn,
 		Hub:   hub,
 		Send:  make(chan Message, hub.config.MessageBuffer),
