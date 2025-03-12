@@ -21,7 +21,7 @@ require (
 	go.mongodb.org/mongo-driver v1.17.3
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.36.0
-	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
+	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.12
 )
@@ -43,7 +43,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
