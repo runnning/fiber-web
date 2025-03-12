@@ -64,6 +64,7 @@ type Hub struct {
 	broadcast  chan Message
 	register   chan *Client
 	unregister chan *Client
+	stop       chan struct{} // 添加停止信号通道
 	mu         sync.RWMutex
 	config     *Config
 }

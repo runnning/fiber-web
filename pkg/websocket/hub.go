@@ -18,6 +18,7 @@ func NewHub(config *Config) *Hub {
 		broadcast:  make(chan Message, config.MessageBuffer),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		stop:       make(chan struct{}),
 		config:     config,
 	}
 }
@@ -32,8 +33,33 @@ func (h *Hub) Run() {
 			h.unregisterClient(client)
 		case message := <-h.broadcast:
 			h.broadcastMessage(message)
+		case <-h.stop:
+			// 清理所有连接
+			h.cleanup()
+			return
 		}
 	}
+}
+
+// Stop 停止Hub
+func (h *Hub) Stop() {
+	close(h.stop)
+}
+
+// cleanup 清理所有连接
+func (h *Hub) cleanup() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// 关闭所有客户端连接
+	for client := range h.clients {
+		close(client.Send)
+		_ = client.Conn.Close()
+	}
+
+	// 清空所有房间
+	h.rooms = make(map[string]map[*Client]struct{})
+	h.clients = make(map[*Client]struct{})
 }
 
 // registerClient 注册新客户端
@@ -107,12 +133,17 @@ func (h *Hub) broadcastToRoom(roomID string, message Message) {
 
 // sendToSpecificClient 发送消息给特定客户端
 func (h *Hub) sendToSpecificClient(message Message) {
+	// 使用map优化查找性能
+	clientID := message.To
+	h.mu.RLock()
 	for client := range h.clients {
-		if id, _ := client.Properties.Load("id"); id == message.To {
+		if id, _ := client.Properties.Load("id"); id == clientID {
+			h.mu.RUnlock()
 			h.sendToClient(client, message)
-			break
+			return
 		}
 	}
+	h.mu.RUnlock()
 }
 
 // broadcastToAll 广播消息给所有客户端
@@ -208,16 +239,18 @@ func (h *Hub) removeFromRoom(client *Client, roomID string) error {
 // GetRoomClients 获取房间中的所有客户端
 func (h *Hub) GetRoomClients(roomID string) ([]*Client, error) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	if room, ok := h.rooms[roomID]; ok {
-		clients := make([]*Client, 0, len(room))
-		for client := range room {
-			clients = append(clients, client)
-		}
-		return clients, nil
+	room, ok := h.rooms[roomID]
+	if !ok {
+		h.mu.RUnlock()
+		return nil, fmt.Errorf("room %s not found", roomID)
 	}
-	return nil, fmt.Errorf("room %s not found", roomID)
+
+	clients := make([]*Client, 0, len(room))
+	for client := range room {
+		clients = append(clients, client)
+	}
+	h.mu.RUnlock()
+	return clients, nil
 }
 
 // GetClientRooms 获取客户端加入的所有房间
@@ -254,15 +287,15 @@ func (h *Hub) BroadcastToRoom(roomID string, message Message) error {
 // SendToClient 发送消息给指定客户端
 func (h *Hub) SendToClient(clientID string, message Message) error {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
 	for client := range h.clients {
 		if id, _ := client.Properties.Load("id"); id == clientID {
+			h.mu.RUnlock()
 			message.To = clientID
 			h.sendToClient(client, message)
 			return nil
 		}
 	}
+	h.mu.RUnlock()
 	return fmt.Errorf("client %s not found", clientID)
 }
 

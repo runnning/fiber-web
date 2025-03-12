@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -37,21 +38,48 @@ func (c *Client) ReadPump() {
 
 	// 创建消息处理工作池
 	const numWorkers = 3
-	jobs := make(chan []byte, numWorkers)
+	jobs := make(chan []byte, numWorkers*2) // 增加缓冲区大小
+	results := make(chan *Message, numWorkers)
 
 	// 启动工作池
 	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for data := range jobs {
-				if message := c.processMessage(websocket.TextMessage, data); message != nil {
-					c.Hub.broadcast <- *message
+			for {
+				select {
+				case data, ok := <-jobs:
+					if !ok {
+						return
+					}
+					if message := c.processMessage(websocket.TextMessage, data); message != nil {
+						select {
+						case results <- message:
+						case <-ctx.Done():
+							return
+						}
+					}
+				case <-ctx.Done():
+					return
 				}
 			}
 		}()
 	}
+
+	// 启动结果处理协程
+	go func() {
+		for message := range results {
+			select {
+			case c.Hub.broadcast <- *message:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	// 读取消息并发送到工作池
 	for {
@@ -65,12 +93,24 @@ func (c *Client) ReadPump() {
 
 		select {
 		case jobs <- data:
+		case <-c.done:
+			return
 		default:
-			log.Printf("warning: message processing queue is full")
+			// 如果工作池已满，使用临时goroutine处理
+			go func(d []byte) {
+				if message := c.processMessage(websocket.TextMessage, d); message != nil {
+					select {
+					case c.Hub.broadcast <- *message:
+					case <-c.done:
+					}
+				}
+			}(data)
 		}
 	}
 
+	cancel()
 	close(jobs)
+	close(results)
 	wg.Wait()
 }
 
@@ -124,8 +164,10 @@ func (c *Client) WritePump() {
 			}
 
 		case <-ticker.C:
-			if c.Hub.config.EnablePing && c.ping() != nil {
-				return
+			if c.Hub.config.EnablePing {
+				if err := c.ping(); err != nil {
+					return
+				}
 			}
 
 		case <-c.done:
@@ -178,19 +220,31 @@ func (c *Client) Close() error {
 	return c.Conn.Close()
 }
 
-// SendMessage 发送消息（带超时控制）
+// SendMessage 发送消息（带超时和重试机制）
 func (c *Client) SendMessage(message Message) error {
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
+	const maxRetries = 3
+	var err error
 
-	select {
-	case c.Send <- message:
-		return nil
-	case <-timer.C:
-		return fmt.Errorf("send timeout")
-	default:
-		return fmt.Errorf("send buffer full")
+	for i := 0; i < maxRetries; i++ {
+		timer := time.NewTimer(2 * time.Second) // 减少单次超时时间，但允许重试
+		select {
+		case c.Send <- message:
+			timer.Stop()
+			return nil
+		case <-timer.C:
+			err = fmt.Errorf("send timeout (attempt %d/%d)", i+1, maxRetries)
+		case <-c.done:
+			timer.Stop()
+			return fmt.Errorf("client closed")
+		default:
+			timer.Stop()
+			// 如果通道已满，等待一小段时间后重试
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		timer.Stop()
 	}
+	return fmt.Errorf("send failed after %d attempts: %v", maxRetries, err)
 }
 
 // JoinRoom 加入房间
