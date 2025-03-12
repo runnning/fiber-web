@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -27,10 +28,8 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.register:
 			h.registerClient(client)
-
 		case client := <-h.unregister:
 			h.unregisterClient(client)
-
 		case message := <-h.broadcast:
 			h.broadcastMessage(message)
 		}
@@ -43,7 +42,6 @@ func (h *Hub) registerClient(client *Client) {
 	h.clients[client] = struct{}{}
 	h.mu.Unlock()
 
-	// 发送欢迎消息
 	client.Send <- Message{
 		Type:  TextMessage,
 		Event: "system",
@@ -57,12 +55,10 @@ func (h *Hub) unregisterClient(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// 从所有房间中移除
 	for room := range client.rooms {
-		h.removeFromRoom(client, room)
+		_ = h.removeFromRoom(client, room)
 	}
 
-	// 从客户端列表中移除
 	if _, ok := h.clients[client]; ok {
 		delete(h.clients, client)
 		close(client.Send)
@@ -74,31 +70,68 @@ func (h *Hub) broadcastMessage(message Message) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	// 如果指定了房间，只发送给房间内的客户端
 	if message.RoomID != "" {
-		if room, ok := h.rooms[message.RoomID]; ok {
-			for client := range room {
-				h.sendToClient(client, message)
-			}
-		}
+		h.broadcastToRoom(message.RoomID, message)
 		return
 	}
 
-	// 如果指定了接收者，只发送给特定客户端
 	if message.To != "" {
-		for client := range h.clients {
-			if id, _ := client.Properties.Load("id"); id == message.To {
-				h.sendToClient(client, message)
-				break
-			}
-		}
+		h.sendToSpecificClient(message)
 		return
 	}
 
-	// 广播给所有客户端
-	for client := range h.clients {
-		h.sendToClient(client, message)
+	// 使用工作池处理广播
+	h.broadcastToAll(message)
+}
+
+// broadcastToRoom 向特定房间广播消息
+func (h *Hub) broadcastToRoom(roomID string, message Message) {
+	if room, ok := h.rooms[roomID]; ok {
+		clients := make([]*Client, 0, len(room))
+		for client := range room {
+			clients = append(clients, client)
+		}
+
+		// 并发发送消息给房间内的客户端
+		var wg sync.WaitGroup
+		for _, client := range clients {
+			wg.Add(1)
+			go func(c *Client) {
+				defer wg.Done()
+				h.sendToClient(c, message)
+			}(client)
+		}
+		wg.Wait()
 	}
+}
+
+// sendToSpecificClient 发送消息给特定客户端
+func (h *Hub) sendToSpecificClient(message Message) {
+	for client := range h.clients {
+		if id, _ := client.Properties.Load("id"); id == message.To {
+			h.sendToClient(client, message)
+			break
+		}
+	}
+}
+
+// broadcastToAll 广播消息给所有客户端
+func (h *Hub) broadcastToAll(message Message) {
+	clients := make([]*Client, 0, len(h.clients))
+	for client := range h.clients {
+		clients = append(clients, client)
+	}
+
+	// 使用goroutine并发发送消息
+	var wg sync.WaitGroup
+	for _, client := range clients {
+		wg.Add(1)
+		go func(c *Client) {
+			defer wg.Done()
+			h.sendToClient(c, message)
+		}(client)
+	}
+	wg.Wait()
 }
 
 // sendToClient 发送消息给特定客户端
@@ -106,7 +139,6 @@ func (h *Hub) sendToClient(client *Client, message Message) {
 	select {
 	case client.Send <- message:
 	default:
-		// 如果客户端的发送缓冲区已满，关闭连接
 		h.unregisterClient(client)
 	}
 }
@@ -116,35 +148,14 @@ func (h *Hub) JoinRoom(client *Client, roomID string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// 创建房间（如果不存在）
 	if _, ok := h.rooms[roomID]; !ok {
 		h.rooms[roomID] = make(map[*Client]struct{})
 	}
 
-	// 将客户端加入房间
 	h.rooms[roomID][client] = struct{}{}
-
-	// 更新客户端的房间列表
-	if client.rooms == nil {
-		client.rooms = make(map[string]struct{})
-	}
 	client.rooms[roomID] = struct{}{}
 
-	// 通知房间其他成员
-	message := Message{
-		Type:   TextMessage,
-		Event:  "join_room",
-		RoomID: roomID,
-		From:   client.ID,
-		Time:   time.Now(),
-	}
-
-	for c := range h.rooms[roomID] {
-		if c != client {
-			h.sendToClient(c, message)
-		}
-	}
-
+	h.notifyRoomEvent(client, roomID, EventJoin)
 	return nil
 }
 
@@ -157,10 +168,15 @@ func (h *Hub) LeaveRoom(client *Client, roomID string) error {
 		return fmt.Errorf("failed to leave room: %v", err)
 	}
 
-	// 通知房间其他成员
+	h.notifyRoomEvent(client, roomID, EventLeave)
+	return nil
+}
+
+// notifyRoomEvent 通知房间事件
+func (h *Hub) notifyRoomEvent(client *Client, roomID, event string) {
 	message := Message{
 		Type:   TextMessage,
-		Event:  "leave_room",
+		Event:  event,
 		RoomID: roomID,
 		From:   client.ID,
 		Time:   time.Now(),
@@ -168,11 +184,11 @@ func (h *Hub) LeaveRoom(client *Client, roomID string) error {
 
 	if room, ok := h.rooms[roomID]; ok {
 		for c := range room {
-			h.sendToClient(c, message)
+			if c != client {
+				h.sendToClient(c, message)
+			}
 		}
 	}
-
-	return nil
 }
 
 // removeFromRoom 从房间中移除客户端（内部方法）
@@ -181,7 +197,6 @@ func (h *Hub) removeFromRoom(client *Client, roomID string) error {
 		delete(room, client)
 		delete(client.rooms, roomID)
 
-		// 如果房间为空，删除房间
 		if len(room) == 0 {
 			delete(h.rooms, roomID)
 		}
@@ -225,11 +240,11 @@ func (h *Hub) Broadcast(message Message) {
 // BroadcastToRoom 向指定房间广播消息
 func (h *Hub) BroadcastToRoom(roomID string, message Message) error {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
 	if _, ok := h.rooms[roomID]; !ok {
+		h.mu.RUnlock()
 		return fmt.Errorf("room %s not found", roomID)
 	}
+	h.mu.RUnlock()
 
 	message.RoomID = roomID
 	h.broadcast <- message
@@ -256,18 +271,27 @@ func (h *Hub) Stats() map[string]interface{} {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	return map[string]interface{}{
-		"total_clients": len(h.clients),
-		"total_rooms":   len(h.rooms),
-		"rooms_stats":   h.getRoomsStats(),
-	}
-}
-
-// getRoomsStats 获取所有房间的统计信息
-func (h *Hub) getRoomsStats() map[string]interface{} {
 	stats := make(map[string]interface{})
+	roomStats := make(map[string]int, len(h.rooms))
+
+	// 并发统计房间信息
+	var wg sync.WaitGroup
+	var statsLock sync.Mutex
+
 	for roomID, room := range h.rooms {
-		stats[roomID] = len(room)
+		wg.Add(1)
+		go func(id string, r map[*Client]struct{}) {
+			defer wg.Done()
+			statsLock.Lock()
+			roomStats[id] = len(r)
+			statsLock.Unlock()
+		}(roomID, room)
 	}
+	wg.Wait()
+
+	stats["total_clients"] = len(h.clients)
+	stats["total_rooms"] = len(h.rooms)
+	stats["rooms_stats"] = roomStats
+
 	return stats
 }

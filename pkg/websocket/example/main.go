@@ -36,7 +36,7 @@ type ChatErrorHandler struct{}
 
 func (h *ChatErrorHandler) HandleError(client *websocket.Client, err error) {
 	log.Printf("Error from client %s: %v", client.ID, err)
-	client.SendMessage(websocket.Message{
+	_ = client.SendMessage(websocket.Message{
 		Type:  websocket.TextMessage,
 		Event: "error",
 		Error: err.Error(),
