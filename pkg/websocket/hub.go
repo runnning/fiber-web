@@ -137,7 +137,7 @@ func (h *Hub) sendToSpecificClient(message Message) {
 	clientID := message.To
 	h.mu.RLock()
 	for client := range h.clients {
-		if id, _ := client.Properties.Load("id"); id == clientID {
+		if id, _ := client.Properties.Load("id"); id.(string) == clientID {
 			h.mu.RUnlock()
 			h.sendToClient(client, message)
 			return
