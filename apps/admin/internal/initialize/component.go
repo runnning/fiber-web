@@ -49,7 +49,7 @@ func (c *Component) Initialize(ctx context.Context) error {
 		server.WithAppName(config.Data.App.Name),
 		server.WithServerHeader("Fiber"),
 		server.WithBodyLimit(4>>20),
-		server.WithDisableStartupMessage(false),
+		server.WithDisableStartupMessage(config.Data.App.Env),
 	)
 
 	c.boot = bootstrap.New()

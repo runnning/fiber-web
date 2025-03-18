@@ -129,9 +129,13 @@ func WithDisableKeepalive(disable bool) Option {
 	}
 }
 
-func WithDisableStartupMessage(disable bool) Option {
+func WithDisableStartupMessage(env string) Option {
 	return func(c *Config) {
-		c.DisableStartupMessage = disable
+		if env == "development" {
+			c.DisableStartupMessage = false
+		} else {
+			c.DisableStartupMessage = true
+		}
 	}
 }
 
