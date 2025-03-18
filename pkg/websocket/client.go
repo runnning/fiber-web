@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gofiber/fiber/v2/utils"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/gofiber/fiber/v2/utils"
 
 	"github.com/gofiber/contrib/websocket"
 )
@@ -27,6 +28,9 @@ func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 // ReadPump 处理从客户端读取消息
 func (c *Client) ReadPump() {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ReadPump panic recovered: %v", r)
+		}
 		c.Hub.unregister <- c
 		close(c.done)
 		_ = c.Conn.Close()
@@ -39,18 +43,24 @@ func (c *Client) ReadPump() {
 
 	// 创建消息处理工作池
 	const numWorkers = 3
-	jobs := make(chan []byte, numWorkers*2) // 增加缓冲区大小
+	jobs := make(chan []byte, numWorkers*2)
 	results := make(chan *Message, numWorkers)
 
-	// 启动工作池
-	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var wg sync.WaitGroup
+	// 启动工作池
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Worker panic recovered: %v", r)
+				}
+				wg.Done()
+			}()
+
 			for {
 				select {
 				case data, ok := <-jobs:
@@ -109,10 +119,13 @@ func (c *Client) ReadPump() {
 		}
 	}
 
-	cancel()
-	close(jobs)
-	close(results)
-	wg.Wait()
+	// 添加优雅关闭
+	defer func() {
+		cancel()
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
 }
 
 // processMessage 处理接收到的消息
@@ -223,29 +236,30 @@ func (c *Client) Close() error {
 
 // SendMessage 发送消息（带超时和重试机制）
 func (c *Client) SendMessage(message Message) error {
-	const maxRetries = 3
-	var err error
+	const (
+		maxRetries = 3
+		retryDelay = 100 * time.Millisecond
+		timeout    = 2 * time.Second
+	)
 
+	var lastErr error
 	for i := 0; i < maxRetries; i++ {
-		timer := time.NewTimer(2 * time.Second) // 减少单次超时时间，但允许重试
 		select {
 		case c.Send <- message:
-			timer.Stop()
 			return nil
-		case <-timer.C:
-			err = fmt.Errorf("send timeout (attempt %d/%d)", i+1, maxRetries)
 		case <-c.done:
-			timer.Stop()
 			return fmt.Errorf("client closed")
-		default:
-			timer.Stop()
-			// 如果通道已满，等待一小段时间后重试
-			time.Sleep(100 * time.Millisecond)
+		case <-time.After(timeout):
+			lastErr = fmt.Errorf("send timeout (attempt %d/%d)", i+1, maxRetries)
+			time.Sleep(retryDelay)
 			continue
 		}
-		timer.Stop()
 	}
-	return fmt.Errorf("send failed after %d attempts: %v", maxRetries, err)
+
+	if c.Hub.config.ErrorHandler != nil {
+		c.Hub.config.ErrorHandler.HandleError(c, lastErr)
+	}
+	return fmt.Errorf("send failed after %d attempts: %v", maxRetries, lastErr)
 }
 
 // JoinRoom 加入房间

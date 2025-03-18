@@ -1,6 +1,8 @@
 package websocket
 
 import (
+	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -21,20 +23,42 @@ var (
 
 // Handler 创建一个新的 WebSocket 处理器
 func Handler(config *Config) fiber.Handler {
+	if config == nil {
+		config = DefaultConfig()
+	}
+
 	hub := NewHub(config)
 	go hub.Run()
 
+	// 添加连接统计
+	go monitorConnections(hub)
+
 	return websocket.New(handleWebSocket(hub, config), getWebSocketConfig(config))
+}
+
+// monitorConnections 监控连接数量
+func monitorConnections(hub *Hub) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		stats := hub.Stats()
+		log.Printf("WebSocket Stats - Total Clients: %d, Total Rooms: %d",
+			stats["total_clients"], stats["total_rooms"])
+	}
 }
 
 // handleWebSocket 处理WebSocket连接
 func handleWebSocket(hub *Hub, config *Config) func(*websocket.Conn) {
 	return func(c *websocket.Conn) {
-		// 尝试获取连接许可
+		// 使用带超时的信号量获取
+		timeout := time.NewTimer(connectionTimeout)
+		defer timeout.Stop()
+
 		select {
 		case connectionSemaphore <- struct{}{}:
 			defer func() { <-connectionSemaphore }()
-		case <-time.After(connectionTimeout):
+		case <-timeout.C:
 			_ = c.WriteJSON(Message{
 				Type:  TextMessage,
 				Event: "error",
@@ -42,6 +66,9 @@ func handleWebSocket(hub *Hub, config *Config) func(*websocket.Conn) {
 				Time:  time.Now(),
 			})
 			_ = c.Close()
+			if config.ErrorHandler != nil {
+				config.ErrorHandler.HandleError(nil, fmt.Errorf("connection limit reached"))
+			}
 			return
 		}
 
@@ -52,7 +79,17 @@ func handleWebSocket(hub *Hub, config *Config) func(*websocket.Conn) {
 
 		client := NewClient(c, hub)
 		activeConnections.Store(client.ID, client)
-		defer activeConnections.Delete(client.ID)
+
+		// 确保在函数返回时清理资源
+		defer func() {
+			activeConnections.Delete(client.ID)
+			if r := recover(); r != nil {
+				log.Printf("WebSocket handler panic recovered: %v", r)
+				if config.ErrorHandler != nil {
+					config.ErrorHandler.HandleError(client, fmt.Errorf("handler panic: %v", r))
+				}
+			}
+		}()
 
 		// 注册客户端
 		hub.register <- client
@@ -60,8 +97,13 @@ func handleWebSocket(hub *Hub, config *Config) func(*websocket.Conn) {
 		// 启动读写协程
 		done := make(chan struct{})
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("WritePump panic recovered: %v", r)
+				}
+				close(done)
+			}()
 			client.WritePump()
-			close(done)
 		}()
 
 		client.ReadPump()
