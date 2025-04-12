@@ -44,7 +44,7 @@ func (fg *FileGenerator) GenerateEntityFiles(baseDir string, entity Entity) erro
 	data := TemplateData{
 		ModuleName: fmt.Sprintf("fiber_web/%s", strings.ToLower(fg.config.Module)),
 		Name:       entity.Name,
-		VarName:    strings.ToLower(entity.Name[:1]) + entity.Name[1:],
+		VarName:    str.SnakeCase(entity.Name),
 		TableName:  entity.TableName,
 		Fields:     fields,
 	}
@@ -53,10 +53,10 @@ func (fg *FileGenerator) GenerateEntityFiles(baseDir string, entity Entity) erro
 		tmplName string
 		path     string
 	}{
-		{dirEntity, filepath.Join(baseDir, dirEntity, strings.ToLower(entity.Name)+".tpl")},
-		{dirRepository, filepath.Join(baseDir, dirRepository, strings.ToLower(entity.Name)+"_repository.tpl")},
-		{dirUsecase, filepath.Join(baseDir, dirUsecase, strings.ToLower(entity.Name)+"_usecase.tpl")},
-		{dirEndpoint, filepath.Join(baseDir, dirEndpoint, strings.ToLower(entity.Name)+"_endpoint.tpl")},
+		{dirEntity, filepath.Join(baseDir, dirEntity, str.SnakeCase(entity.Name)+".tpl")},
+		{dirRepository, filepath.Join(baseDir, dirRepository, str.SnakeCase(entity.Name)+"_repository.tpl")},
+		{dirUsecase, filepath.Join(baseDir, dirUsecase, str.SnakeCase(entity.Name)+"_usecase.tpl")},
+		{dirEndpoint, filepath.Join(baseDir, dirEndpoint, str.SnakeCase(entity.Name)+"_endpoint.tpl")},
 	}
 
 	for _, file := range files {
