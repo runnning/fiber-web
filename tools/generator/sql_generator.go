@@ -181,6 +181,9 @@ func (g *SQLGenerator) GenerateSQLFileName() string {
 		parts[0] = fmt.Sprintf("create_%s_tables", strings.ToLower(g.config.Module))
 	}
 
-	parts = append(parts[:2], time.Now().Format("20060102_150405"))
+	if g.config.SQLConfig.IncludeTimestamp {
+		parts = append(parts[:2], time.Now().Format("20060102_150405"))
+	}
+
 	return strings.Join(parts, "_") + ".sql"
 }
