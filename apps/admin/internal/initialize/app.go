@@ -12,16 +12,16 @@ import (
 type App struct {
 	infra   *Infra
 	domain  *Domain
-	server  *server.FiberServer
+	servers map[string]*server.FiberServer
 	boot    *bootstrap.Bootstrapper
 	appType AppType
 }
 
-func NewApp(infra *Infra, domain *Domain, server *server.FiberServer, boot *bootstrap.Bootstrapper, appType AppType) *App {
+func NewApp(infra *Infra, domain *Domain, servers map[string]*server.FiberServer, boot *bootstrap.Bootstrapper, appType AppType) *App {
 	return &App{
 		infra:   infra,
 		domain:  domain,
-		server:  server,
+		servers: servers,
 		boot:    boot,
 		appType: appType,
 	}
@@ -38,12 +38,21 @@ func (a *App) Init(ctx context.Context) error {
 	return nil
 }
 
+// servers 返回主服务器
+func (a *App) server(name string) *server.FiberServer {
+	s, ok := a.servers[name]
+	if !ok {
+		panic("server not found")
+	}
+	return s
+}
+
 func (a *App) initRoutes(ctx context.Context) error {
 	switch a.appType {
 	case AppTypeAPI:
-		return transport.NewRouterInitializer(a.server.App(), a.domain.Uses).InitAPIRoutes()
+		return transport.NewRouterInitializer(a.server("admin").App(), a.domain.Uses).InitAPIRoutes()
 	case AppTypeAdmin:
-		return transport.NewRouterInitializer(a.server.App(), a.domain.Uses).InitAdminRoutes()
+		return transport.NewRouterInitializer(a.server("admin").App(), a.domain.Uses).InitAdminRoutes()
 	default:
 		return fmt.Errorf("unsupported app type: %s", a.appType)
 	}

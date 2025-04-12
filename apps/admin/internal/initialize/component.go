@@ -43,7 +43,7 @@ func NewComponent(appType AppType) *Component {
 func (c *Component) Initialize(ctx context.Context) error {
 	// 初始化主服务器
 	c.AddServer(
-		"main",
+		"admin",
 		server.WithReadTimeout(time.Second*30),
 		server.WithWriteTimeout(time.Second*30),
 		server.WithIdleTimeout(time.Second*30),
@@ -68,7 +68,7 @@ func (c *Component) Initialize(ctx context.Context) error {
 	c.boot.AddComponent(domain)
 
 	// 使用主服务器初始化应用
-	c.app = NewApp(c.infra, domain, c.GetServer("main"), c.boot, c.appType)
+	c.app = NewApp(c.infra, domain, c.servers, c.boot, c.appType)
 	c.boot.AddComponent(c.app)
 
 	return c.boot.Bootstrap(ctx)
@@ -78,14 +78,6 @@ func (c *Component) Initialize(ctx context.Context) error {
 func (c *Component) AddServer(name string, opts ...server.Option) {
 	newServer := server.NewFiberServer(opts...)
 	c.servers[name] = newServer
-}
-
-func (c *Component) GetServer(name string) *server.FiberServer {
-	fiberServer, ok := c.servers[name]
-	if !ok {
-		panic("未找到该服务")
-	}
-	return fiberServer
 }
 
 // Run 运行应用
