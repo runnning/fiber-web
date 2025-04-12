@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"fiber_web/pkg/utils/str"
 	"fmt"
 	"strings"
 	"time"
@@ -124,14 +123,8 @@ func (g *SQLGenerator) writeTableOptions(b *strings.Builder, entity Entity) {
 }
 
 func (g *SQLGenerator) generateColumnDef(field Field) string {
-	fieldName := field.Name
-	if len(fieldName) > 2 {
-		fieldName = str.SnakeCase(fieldName)
-	} else {
-		fieldName = strings.ToLower(fieldName)
-	}
 	parts := []string{
-		fmt.Sprintf("  %s %s", fieldName, g.getColumnType(field)),
+		fmt.Sprintf("  %s %s", field.Name, g.getColumnType(field)),
 	}
 
 	parts = append(parts, g.getColumnConstraints(field)...)

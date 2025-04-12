@@ -5,7 +5,7 @@ db_charset: utf8mb4
 
 # SQL生成配置
 sql_config:
-  filename: create_user_tables
+  filename: create_users_tables
   include_timestamp: true
   version: v1
 
@@ -16,70 +16,69 @@ entities:
     comment: 用户表
     # 索引定义
     indexes:
-      - name: username_email
-        fields: [ "Username", "Email" ]
+      - name: name_email
+        fields: [ "name", "email" ]
         unique: true
         comment: "用户名和邮箱组合唯一索引"
       - name: email
-        fields: [ "Email" ]
+        fields: [ "email" ]
         unique: true
         comment: "邮箱唯一索引"
       - name: status
-        fields: [ "Status" ]
+        fields: [ "status" ]
         comment: "状态索引"
       - name: status_created
-        fields: [ "Status", "CreatedAt" ]
+        fields: [ "status", "created_at" ]
         comment: "状态和创建时间复合索引"
     # 字段定义
     fields:
-      - name: ID
+      - name: id
         type: uint
         # tag: 'json:"id"'
         comment: 主键ID
         nullable: false
         primary_key: true
         auto_incr: true
-      - name: Username
+      - name: name
         type: string
         # tag: 'json:"username" gorm:"size:50;not null"'
         comment: 用户名
         sql_type: VARCHAR(50)
         nullable: false
         default: "''"
-      - name: Email
+      - name: email
         type: string
         # tag: 'json:"email" gorm:"size:100;not null"'
         comment: 邮箱
         sql_type: VARCHAR(100)
         nullable: false
         default: "''"
-      - name: Password
+      - name: password
         type: string
         # tag: 'json:"password" gorm:"size:100;not null"'
         comment: 密码
         sql_type: VARCHAR(100)
         nullable: false
         default: "''"
-      - name: Status
+      - name: status
         type: int8
         sql_type: TINYINT(3)
         # tag: 'json:"status"'
         comment: 状态
         nullable: false
         default: "1"
-      - name: CreatedAt
+      - name: created_at
         type: time.Time
         # tag: 'json:"created_at" gorm:"not null"'
         comment: 创建时间
-        nullable: false
-      - name: UpdatedAt
+        nullable: true
+      - name: updated_at
         type: time.Time
         # tag: 'json:"updated_at" gorm:"not null"'
         comment: 更新时间
-        nullable: false
-      - name: DeletedAt
+        nullable: true
+      - name: deleted_at
         type: gorm.DeletedAt
         # tag: 'json:"deleted_at,omitempty" gorm:"index"'
         comment: 删除时间
-        default: "0"
-        nullable: false
+        nullable: true

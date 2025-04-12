@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fibe
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,9 +35,18 @@ func (fg *FileGenerator) CreateDirs(baseDir string) error {
 
 // GenerateEntityFiles 生成实体相关的所有文件
 func (fg *FileGenerator) GenerateEntityFiles(baseDir string, entity Entity) error {
+ity Entity) error {
+	// 转换字段名称为驼峰命名
+	fields := make([]Field, 0, len(entity.Fields))
+	for _, field := range entity.Fields {
+		field.Name = str.PascalCase(field.Name)
+		fields = append(fields, field)
+	}
+	data := TemplateData{
+		ModuleName: fmt.Sprintf("fib
 	data := TemplateData{
 		ModuleName: fmt.Sprintf("fiber_web/%s", strings.ToLower(fg.config.Module)),
-		Name:       entity.Name,
+		Fields:     fields,
 		VarName:    strings.ToLower(entity.Name[:1]) + entity.Name[1:],
 		TableName:  entity.TableName,
 		Fields:     entity.Fields,
