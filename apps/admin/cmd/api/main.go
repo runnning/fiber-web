@@ -26,4 +26,5 @@ func main() {
 	if err := component.Run(ctx); err != nil {
 		log.Fatal(err)
 	}
+
 }

@@ -35,6 +35,7 @@ type Config struct {
 	DisableDefaultContentType bool
 	DisableStartupMessage     bool
 	AppName                   string
+	Addr                      string
 }
 
 // Option 定义配置选项的函数类型
@@ -53,6 +54,13 @@ func defaultConfig() *Config {
 		CaseSensitive: false,
 		BodyLimit:     4 * 1024 * 1024, // 4MB
 		Concurrency:   256 * 1024,      // 256k
+	}
+}
+
+// WithAddr 服务器地址
+func WithAddr(addr string) Option {
+	return func(c *Config) {
+		c.Addr = addr
 	}
 }
 
@@ -285,7 +293,7 @@ func (s *FiberServer) processHandlers(handlers []fiber.Handler) []string {
 	return names
 }
 
-func (s *FiberServer) Start(addr string) error {
+func (s *FiberServer) Start() error {
 	// 如果是开发环境，打印路由信息
 	if s.config.Env == "development" {
 		routes := s.app.GetRoutes()
@@ -297,11 +305,11 @@ func (s *FiberServer) Start(addr string) error {
 
 		fmt.Printf("\n%s %s\n\n",
 			color.Colorize("[Fiber]", color.Green),
-			color.Colorize("Server listening on "+addr, color.Yellow),
+			color.Colorize("Server listening on "+s.config.Addr, color.Yellow),
 		)
 	}
 
-	return s.app.Listen(addr)
+	return s.app.Listen(s.config.Addr)
 }
 
 func (s *FiberServer) Shutdown(ctx context.Context) error {

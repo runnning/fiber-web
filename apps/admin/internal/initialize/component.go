@@ -24,7 +24,7 @@ const (
 // Component 组件管理器
 type Component struct {
 	appType        AppType
-	server         *server.FiberServer
+	servers        map[string]*server.FiberServer // 直接使用map存储服务器名称和实例
 	boot           *bootstrap.Bootstrapper
 	infra          *Infra
 	app            *App
@@ -34,14 +34,16 @@ type Component struct {
 func NewComponent(appType AppType) *Component {
 	return &Component{
 		appType:        appType,
+		servers:        make(map[string]*server.FiberServer),
 		lifecycleHooks: NewLifecycleHooks(appType),
 	}
 }
 
 // Initialize 初始化组件
 func (c *Component) Initialize(ctx context.Context) error {
-	// 初始化服务器
-	c.server = server.NewFiberServer(
+	// 初始化主服务器
+	c.AddServer(
+		"main",
 		server.WithReadTimeout(time.Second*30),
 		server.WithWriteTimeout(time.Second*30),
 		server.WithIdleTimeout(time.Second*30),
@@ -50,6 +52,7 @@ func (c *Component) Initialize(ctx context.Context) error {
 		server.WithServerHeader("Fiber"),
 		server.WithBodyLimit(4>>20),
 		server.WithDisableStartupMessage(config.Data.App.Env),
+		server.WithAddr(config.Data.Server.Address),
 	)
 
 	c.boot = bootstrap.New()
@@ -64,10 +67,25 @@ func (c *Component) Initialize(ctx context.Context) error {
 	domain := NewDomain(c.infra)
 	c.boot.AddComponent(domain)
 
-	c.app = NewApp(c.infra, domain, c.server, c.boot, c.appType)
+	// 使用主服务器初始化应用
+	c.app = NewApp(c.infra, domain, c.GetServer("main"), c.boot, c.appType)
 	c.boot.AddComponent(c.app)
 
 	return c.boot.Bootstrap(ctx)
+}
+
+// AddServer 添加一个新的服务器
+func (c *Component) AddServer(name string, opts ...server.Option) {
+	newServer := server.NewFiberServer(opts...)
+	c.servers[name] = newServer
+}
+
+func (c *Component) GetServer(name string) *server.FiberServer {
+	fiberServer, ok := c.servers[name]
+	if !ok {
+		panic("未找到该服务")
+	}
+	return fiberServer
 }
 
 // Run 运行应用
@@ -77,16 +95,21 @@ func (c *Component) Run(ctx context.Context) error {
 		return err
 	}
 
-	// 启动服务器
-	go func() {
-		// 这里不需要检查错误，因为正常关闭时也会返回错误
-		if err := c.server.Start(config.Data.Server.Address); err != nil {
-			// 只有在非正常关闭时才记录错误
-			if err.Error() != "server closed" {
-				log.Printf("Server error: %v\n", err)
+	// 启动所有服务器
+	for name, srv := range c.servers {
+		serverName := name // 创建副本以在闭包中使用
+
+		go func(srvName string, srvInstance *server.FiberServer) {
+			// 这里不需要检查错误，因为正常关闭时也会返回错误
+			log.Printf("Starting server %s\n", srvName)
+			if err := srvInstance.Start(); err != nil {
+				// 只有在非正常关闭时才记录错误
+				if err.Error() != "server closed" {
+					log.Printf("Server %s error: %v\n", srvName, err)
+				}
 			}
-		}
-	}()
+		}(serverName, srv)
+	}
 
 	return c.waitForSignal(ctx)
 }
@@ -111,10 +134,13 @@ func (c *Component) Shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1. 先关闭 HTTP 服务器
-	if err := c.server.Shutdown(ctx); err != nil {
-		log.Printf("Error during server shutdown: %v\n", err)
-		return err
+	// 1. 先关闭所有 HTTP 服务器
+	for name, srv := range c.servers {
+		log.Printf("Shutting down server %s...\n", name)
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("Error during server %s shutdown: %v\n", name, err)
+			return err
+		}
 	}
 
 	// 2. 关闭所有组件（包括基础设施）
