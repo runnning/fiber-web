@@ -135,3 +135,31 @@ func DefaultIfEmpty(s string, defaultValue string) string {
 	}
 	return s
 }
+
+// PascalCase 将字符串转换为帕斯卡命名（每个单词首字母大写）
+// 示例: hello_world -> HelloWorld
+func PascalCase(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+
+	n := strings.Builder{}
+	n.Grow(len(s))
+	capNext := true
+	for _, v := range []rune(s) {
+		if v >= 'A' && v <= 'Z' {
+			v = unicode.ToLower(v)
+		}
+		if v == '_' || v == '-' || v == ' ' {
+			capNext = true
+		} else {
+			if capNext {
+				v = unicode.ToUpper(v)
+				capNext = false
+			}
+			n.WriteRune(v)
+		}
+	}
+	return n.String()
+}

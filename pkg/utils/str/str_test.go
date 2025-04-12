@@ -223,3 +223,27 @@ func BenchmarkKebabCase(b *testing.B) {
 		KebabCase(s)
 	}
 }
+
+func TestPascalCase(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want string
+	}{
+		{"空字符串", "", ""},
+		{"单个单词", "hello", "Hello"},
+		{"下划线分隔", "hello_world", "HelloWorld"},
+		{"中划线分隔", "hello-world", "HelloWorld"},
+		{"空格分隔", "hello world", "HelloWorld"},
+		{"混合大小写", "Hello_World", "HelloWorld"},
+		{"多种分隔符", "hello_world-test space", "HelloWorldTestSpace"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := PascalCase(tt.s); got != tt.want {
+				t.Errorf("CamelCase(%q) = %v, 期望 %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
