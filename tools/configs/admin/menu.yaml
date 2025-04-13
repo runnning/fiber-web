@@ -1,0 +1,132 @@
+# admin模块配置
+module: admin
+db_engine: InnoDB
+db_charset: utf8mb4
+
+# SQL生成配置
+sql_config:
+  filename: create_menus_tables
+  include_timestamp: false
+  version: v1
+
+# 实体定义
+entities:
+  - name: Menu
+    table_name: menus
+    comment: 菜单表
+    # 索引定义
+    indexes:
+      - name: parent_id
+        fields: [ "parent_id" ]
+        comment: "父级ID索引"
+    # 字段定义
+    fields:
+      - name: id
+        type: uint
+        # tag: 'json:"id"'
+        comment: 主键ID
+        nullable: false
+        primary_key: true
+        auto_incr: true
+      - name: parent_id
+        type: uint
+        comment: 父级ID
+        nullable: false
+        default: "0"
+      - name: path
+        type: string
+        # tag: 'json:"email" gorm:"size:100;not null"'
+        comment: 地址
+        sql_type: VARCHAR(255)
+        nullable: false
+        default: "''"
+      - name: title
+        type: string
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        comment: 标题
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: name
+        type: string
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        comment: 路由中的name
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: component
+        type: string
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        comment: 绑定的组件，默认类型：Iframe、RouteView、ComponentError
+        sql_type: VARCHAR(255)
+        nullable: false
+        default: "''"
+      - name: locale
+        type: string
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        comment: 本地化标识
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: icon
+        type: string
+        comment: 图标
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: redirect
+        type: string
+        comment: 重定向地址
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        sql_type: VARCHAR(255)
+        nullable: false
+        default: "''"
+      - name: url
+        comment: iframe模式下的跳转url，不能与path重复
+        type: string
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        sql_type: VARCHAR(255)
+        nullable: false
+        default: "''"                                                         
+      - name: keep_alive
+        type: int8
+        sql_type: TINYINT(3)
+        # tag: 'json:"status"'
+        comment:  是否缓存
+        nullable: false
+        default: "1"
+      - name: hide_menu
+        type: int8
+        sql_type: TINYINT(3)
+        comment:  是否隐藏
+        nullable: false
+        default: "1"
+      - name: target
+        type: string
+        comment: 全连接跳转模式
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        sql_type: VARCHAR(20)
+        nullable: false
+        default: "''"
+      - name: weight
+        type: int
+        comment: 排序权重
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        nullable: false
+        default: "0"                            
+      - name: created_at
+        type: time.Time
+        comment: 创建时间
+        nullable: false
+        default: "''"
+      - name: updated_at
+        type: time.Time
+        comment: 更新时间
+        nullable: false
+        default: "''"        
+      - name: deleted_at
+        type: gorm.DeletedAt
+        comment: 删除时间
+        default: "''"         
+        nullable: false

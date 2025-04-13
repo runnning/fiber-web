@@ -1,0 +1,70 @@
+# admin模块配置
+module: admin
+db_engine: InnoDB
+db_charset: utf8mb4
+
+# SQL生成配置
+sql_config:
+  filename: create_api_tables
+  include_timestamp: false
+  version: v1
+
+# 实体定义
+entities:
+  - name: Api
+    table_name: api
+    comment: 接口表
+    # 字段定义
+    fields:
+      - name: ID
+        type: uint
+        # tag: 'json:"id"'
+        comment: 主键ID
+        nullable: false
+        primary_key: true
+        auto_incr: true
+      - name: group
+        type: string
+        # tag: 'json:"username" gorm:"size:50;not null"'
+        comment: api分组
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: name
+        type: string
+        # tag: 'json:"username" gorm:"size:50;not null"'
+        comment: api分组名称
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"  
+      - name: path
+        type: string
+        # tag: 'json:"username" gorm:"size:50;not null"'
+        comment: api路径
+        sql_type: VARCHAR(255)
+        nullable: false
+        default: "''"
+      - name: method
+        type: string
+        # tag: 'json:"username" gorm:"size:50;not null"'
+        comment: http方法
+        sql_type: VARCHAR(20)
+        nullable: false
+        default: "''"                          
+      - name: created_at
+        type: time.Time
+        # tag: 'json:"created_at" gorm:"not null"'
+        comment: 创建时间
+        nullable: false
+      - name: updated_at
+        type: time.Time
+        default: "''"
+        # tag: 'json:"updated_at" gorm:"not null"'
+        comment: 更新时间
+        nullable: false
+      - name: deleted_at
+        type: gorm.DeletedAt
+        # tag: 'json:"deleted_at,omitempty" gorm:"index"'
+        comment: 删除时间
+        default: "''"
+        nullable: false

@@ -1,0 +1,56 @@
+# admin模块配置
+module: admin
+db_engine: InnoDB
+db_charset: utf8mb4
+
+# SQL生成配置
+sql_config:
+  filename: create_roles_tables
+  include_timestamp: false
+  version: v1
+
+# 实体定义
+entities:
+  - name: Role
+    table_name: roles
+    comment: 角色表
+    # 索引定义
+    indexes:
+      - name: name
+        fields: [ "name" ]
+        unique: true
+        comment: "角色名唯一索引"
+    # 字段定义
+    fields:
+      - name: ID
+        type: uint
+        # tag: 'json:"id"'
+        comment: 主键ID
+        nullable: false
+        primary_key: true
+        auto_incr: true
+      - name: name
+        type: string
+        # tag: 'json:"username" gorm:"size:50;not null"'
+        comment: 角色名
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: created_at
+        type: time.Time
+        default: "''"        
+        # tag: 'json:"created_at" gorm:"not null"'
+        comment: 创建时间
+        nullable: false
+      - name: updated_at
+        type: time.Time
+        # tag: 'json:"updated_at" gorm:"not null"'
+        comment: 更新时间
+        nullable: false
+        default: "''"        
+      - name: DeletedAt
+        type: deleted_at
+        # tag: 'json:"deleted_at,omitempty" gorm:"index"'
+        comment: 删除时间
+        default: "''"
+        nullable: false
