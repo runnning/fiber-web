@@ -3,6 +3,7 @@ package transport
 import (
 	"fiber_web/apps/admin/internal/endpoint"
 	"fiber_web/apps/admin/internal/middleware"
+	"github.com/gofiber/fiber/v2"
 	"time"
 )
 
