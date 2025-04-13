@@ -23,7 +23,7 @@ entities:
         nullable: false
         primary_key: true
         auto_incr: true
-      - name: group
+      - name: api_group
         type: string
         # tag: 'json:"username" gorm:"size:50;not null"'
         comment: api分组
@@ -50,21 +50,19 @@ entities:
         comment: http方法
         sql_type: VARCHAR(20)
         nullable: false
-        default: "''"                          
+        default: "''"
       - name: created_at
         type: time.Time
         # tag: 'json:"created_at" gorm:"not null"'
         comment: 创建时间
-        nullable: false
+        nullable: true
       - name: updated_at
-        type: time.Time
-        default: "''"
+        type: time.Time     
         # tag: 'json:"updated_at" gorm:"not null"'
         comment: 更新时间
-        nullable: false
+        nullable: true
       - name: deleted_at
-        type: gorm.DeletedAt
+        type: gorm.DeletedAt      
         # tag: 'json:"deleted_at,omitempty" gorm:"index"'
         comment: 删除时间
-        default: "''"
-        nullable: false
+        nullable: true                                  

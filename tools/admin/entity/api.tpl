@@ -9,7 +9,7 @@ import (
 // Api 实体模型
 type Api struct {
 	Id uint  // 主键ID
-	Group string  // api分组
+	ApiGroup string  // api分组
 	Name string  // api分组名称
 	Path string  // api路径
 	Method string  // http方法

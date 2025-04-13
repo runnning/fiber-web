@@ -1,0 +1,16 @@
+-- 生成时间: 2025-04-13 21:23:35
+-- 模块: admin
+
+-- 接口表
+CREATE TABLE IF NOT EXISTS api (
+  ID INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  api_group VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'api分组',
+  name VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'api分组名称',
+  path VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'api路径',
+  method VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'http方法',
+  created_at DATETIME COMMENT '创建时间',
+  updated_at DATETIME COMMENT '更新时间',
+  deleted_at DATETIME COMMENT '删除时间',
+  PRIMARY KEY (ID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='接口表';
+

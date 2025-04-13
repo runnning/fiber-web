@@ -12,7 +12,7 @@ type Role struct {
 	Name string  // 角色名
 	CreatedAt time.Time  // 创建时间
 	UpdatedAt time.Time  // 更新时间
-	Deletedat deleted_at  // 删除时间
+	DeletedAt gorm.DeletedAt  // 删除时间
 }
 
 // TableName 指定表名

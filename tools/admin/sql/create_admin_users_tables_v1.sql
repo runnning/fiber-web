@@ -1,4 +1,4 @@
--- 生成时间: 2025-04-13 21:09:37
+-- 生成时间: 2025-04-13 21:14:47
 -- 模块: admin
 
 -- 管理员用户表
@@ -8,9 +8,9 @@ CREATE TABLE IF NOT EXISTS admin_users (
   email VARCHAR(100) NOT NULL DEFAULT '' COMMENT '邮箱',
   password VARCHAR(100) NOT NULL DEFAULT '' COMMENT '密码',
   status TINYINT(3) NOT NULL DEFAULT 1 COMMENT '状态',
-  created_at DATETIME NOT NULL DEFAULT '' COMMENT '创建时间',
-  updated_at DATETIME NOT NULL DEFAULT '' COMMENT '更新时间',
-  deleted_at DATETIME NOT NULL DEFAULT '' COMMENT '删除时间',
+  created_at DATETIME COMMENT '创建时间',
+  updated_at DATETIME COMMENT '更新时间',
+  deleted_at DATETIME COMMENT '删除时间',
   PRIMARY KEY (ID),
   UNIQUE KEY `admin_users_name_unique` (name) COMMENT '用户名唯一索引',
   UNIQUE KEY `admin_users_email_unique` (email) COMMENT '邮箱唯一索引',

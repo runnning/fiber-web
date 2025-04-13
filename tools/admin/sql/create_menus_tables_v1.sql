@@ -1,4 +1,4 @@
--- 生成时间: 2025-04-13 21:03:18
+-- 生成时间: 2025-04-13 21:14:55
 -- 模块: admin
 
 -- 菜单表
@@ -17,9 +17,9 @@ CREATE TABLE IF NOT EXISTS menus (
   hide_menu TINYINT(3) NOT NULL DEFAULT 1 COMMENT '是否隐藏',
   target VARCHAR(20) NOT NULL DEFAULT '' COMMENT '全连接跳转模式',
   weight INT NOT NULL DEFAULT 0 COMMENT '排序权重',
-  created_at DATETIME NOT NULL DEFAULT '' COMMENT '创建时间',
-  updated_at DATETIME NOT NULL DEFAULT '' COMMENT '更新时间',
-  deleted_at DATETIME NOT NULL DEFAULT '' COMMENT '删除时间',
+  created_at DATETIME COMMENT '创建时间',
+  updated_at DATETIME COMMENT '更新时间',
+  deleted_at DATETIME COMMENT '删除时间',
   PRIMARY KEY (id),
   KEY `menus_parent_id_idx` (parent_id) COMMENT '父级ID索引'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='菜单表';

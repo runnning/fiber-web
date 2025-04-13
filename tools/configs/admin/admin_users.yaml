@@ -71,17 +71,14 @@ entities:
         type: time.Time
         # tag: 'json:"created_at" gorm:"not null"'
         comment: 创建时间
-        default: "''"
-        nullable: false
+        nullable: true
       - name: updated_at
-        type: time.Time
-        default: "''"        
+        type: time.Time     
         # tag: 'json:"updated_at" gorm:"not null"'
         comment: 更新时间
-        nullable: false
+        nullable: true
       - name: deleted_at
-        type: gorm.DeletedAt
-        default: "''"        
+        type: gorm.DeletedAt      
         # tag: 'json:"deleted_at,omitempty" gorm:"index"'
         comment: 删除时间
-        nullable: false
+        nullable: true
