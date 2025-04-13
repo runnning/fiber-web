@@ -1,104 +1,104 @@
 package endpoint
 
 import (
-	"fiber_web/admin/internal/entity"
-	"fiber_web/admin/internal/usecase"
-	"fiber_web/admin/pkg/query"
-	"fiber_web/admin/pkg/ctx"
-	"fiber_web/admin/pkg/validator"
-	"strconv"
-	"time"
+	"fiber_web/apps/admin/internal/entity"
+	"fiber_web/apps/admin/internal/usecase"
+	"fiber_web/pkg/ctx"
+	"fiber_web/pkg/query"
+	"fiber_web/pkg/response"
+	"fiber_web/pkg/validator"
+
 	"github.com/gofiber/fiber/v2"
 )
 
-type ApiHandler struct {
-	apiUseCase usecase.ApiUseCase
-	validator          *validator.Validator
+type RoleHandler struct {
+	roleUseCase usecase.RoleUseCase
+	validator   *validator.Validator
 }
 
-func NewApiHandler(apiUseCase usecase.ApiUseCase, validator *validator.Validator) *ApiHandler {
-	return &ApiHandler{
-		apiUseCase: apiUseCase,
-		validator:          validator,
+func NewRoleHandler(roleUseCase usecase.RoleUseCase, validator *validator.Validator) *RoleHandler {
+	return &RoleHandler{
+		roleUseCase: roleUseCase,
+		validator:   validator,
 	}
 }
 
-func (h *ApiHandler) GetApi(c *fiber.Ctx) error {
+func (h *RoleHandler) GetRole(c *fiber.Ctx) error {
 	id, err := c.ParamsInt("id")
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "无效的ID")
 	}
 
-	api, err := h.apiUseCase.GetApi(c.Context(), uint(id))
+	role, err := h.roleUseCase.GetRole(c.Context(), uint(id))
 	if err != nil {
 		return response.Error(c, fiber.StatusNotFound, "记录不存在")
 	}
 
-	return response.Success(c, api)
+	return response.Success(c, role)
 }
 
-func (h *ApiHandler) UpdateApi(c *fiber.Ctx) error {
+func (h *RoleHandler) UpdateRole(c *fiber.Ctx) error {
 	id, err := c.ParamsInt("id")
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "无效的ID")
 	}
 
-	api := new(entity.Api)
-	if err := c.BodyParser(api); err != nil {
+	role := new(entity.Role)
+	if err := c.BodyParser(role); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
 	}
 
-	if err := h.validator.ValidateStruct(api); err != nil {
+	if err := h.validator.ValidateStruct(role); err != nil {
 		errors := h.validator.TranslateError(err)
 		return response.ValidationError(c, errors)
 	}
 
-	api.ID = uint(id)
-	if err := h.apiUseCase.UpdateApi(c.Context(), api); err != nil {
+	role.Id = uint(id)
+	if err := h.roleUseCase.UpdateRole(c.Context(), role); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "更新失败")
 	}
 
-	return response.Success(c, api)
+	return response.Success(c, role)
 }
 
-func (h *ApiHandler) DeleteApi(c *fiber.Ctx) error {
+func (h *RoleHandler) DeleteRole(c *fiber.Ctx) error {
 	id, err := c.ParamsInt("id")
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "无效的ID")
 	}
 
-	if err := h.apiUseCase.DeleteApi(c.Context(), uint(id)); err != nil {
+	if err := h.roleUseCase.DeleteRole(c.Context(), uint(id)); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "删除失败")
 	}
 
 	return response.Success(c, nil)
 }
 
-func (h *ApiHandler) CreateApi(c *fiber.Ctx) error {
-	api := new(entity.Api)
-	if err := c.BodyParser(api); err != nil {
+func (h *RoleHandler) CreateRole(c *fiber.Ctx) error {
+	role := new(entity.Role)
+	if err := c.BodyParser(role); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "无效的请求数据")
 	}
 
-	if err := h.validator.ValidateStruct(api); err != nil {
+	if err := h.validator.ValidateStruct(role); err != nil {
 		errors := h.validator.TranslateError(err)
 		return response.ValidationError(c, errors)
 	}
 
-	if err := h.apiUseCase.CreateApi(c.Context(), api); err != nil {
+	if err := h.roleUseCase.CreateRole(c.Context(), role); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "创建失败")
 	}
 
-	return response.Success(c, api)
+	return response.Success(c, role)
 }
 
-func (h *ApiHandler) ListApis(c *fiber.Ctx) error {
+func (h *RoleHandler) ListRoles(c *fiber.Ctx) error {
 	params := query.NewQuery().
 		AddCondition("status", query.OpEq, 1).
 		AddOrderBy("id DESC").
 		SetPagination(ctx.GetPagination(c)).
 		Select("id", "username", "email", "role", "status", "created_at", "updated_at")
-	result, err := h.apiUseCase.List(c.Context(), params)
+	result, err := h.roleUseCase.List(c.Context(), params)
 	if err != nil {
 		return response.ServerError(c, err)
 	}

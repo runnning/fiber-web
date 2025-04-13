@@ -1,25 +1,25 @@
 package endpoint
 
 import (
-	"fiber_web/admin/internal/entity"
-	"fiber_web/admin/internal/usecase"
-	"fiber_web/admin/pkg/query"
-	"fiber_web/admin/pkg/ctx"
-	"fiber_web/admin/pkg/validator"
-	"strconv"
-	"time"
+	"fiber_web/apps/admin/internal/entity"
+	"fiber_web/apps/admin/internal/usecase"
+	"fiber_web/pkg/ctx"
+	"fiber_web/pkg/query"
+	"fiber_web/pkg/response"
+	"fiber_web/pkg/validator"
+
 	"github.com/gofiber/fiber/v2"
 )
 
 type AdminUserHandler struct {
 	admin_userUseCase usecase.AdminUserUseCase
-	validator          *validator.Validator
+	validator         *validator.Validator
 }
 
 func NewAdminUserHandler(admin_userUseCase usecase.AdminUserUseCase, validator *validator.Validator) *AdminUserHandler {
 	return &AdminUserHandler{
 		admin_userUseCase: admin_userUseCase,
-		validator:          validator,
+		validator:         validator,
 	}
 }
 
@@ -53,7 +53,7 @@ func (h *AdminUserHandler) UpdateAdminUser(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
-	admin_user.ID = uint(id)
+	admin_user.Id = uint(id)
 	if err := h.admin_userUseCase.UpdateAdminUser(c.Context(), admin_user); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "更新失败")
 	}

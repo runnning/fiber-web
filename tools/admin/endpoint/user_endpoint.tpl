@@ -6,7 +6,6 @@ import (
 	"fiber_web/admin/pkg/query"
 	"fiber_web/admin/pkg/ctx"
 	"fiber_web/admin/pkg/validator"
-	"fiber_web/admin/pkg/validator"
 	"strconv"
 	"time"
 	"github.com/gofiber/fiber/v2"

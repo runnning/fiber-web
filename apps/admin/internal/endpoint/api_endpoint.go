@@ -1,25 +1,25 @@
 package endpoint
 
 import (
-	"fiber_web/admin/internal/entity"
-	"fiber_web/admin/internal/usecase"
-	"fiber_web/admin/pkg/query"
-	"fiber_web/admin/pkg/ctx"
-	"fiber_web/admin/pkg/validator"
-	"strconv"
-	"time"
+	"fiber_web/apps/admin/internal/entity"
+	"fiber_web/apps/admin/internal/usecase"
+	"fiber_web/pkg/ctx"
+	"fiber_web/pkg/query"
+	"fiber_web/pkg/response"
+	"fiber_web/pkg/validator"
+
 	"github.com/gofiber/fiber/v2"
 )
 
 type ApiHandler struct {
 	apiUseCase usecase.ApiUseCase
-	validator          *validator.Validator
+	validator  *validator.Validator
 }
 
 func NewApiHandler(apiUseCase usecase.ApiUseCase, validator *validator.Validator) *ApiHandler {
 	return &ApiHandler{
 		apiUseCase: apiUseCase,
-		validator:          validator,
+		validator:  validator,
 	}
 }
 
@@ -53,7 +53,7 @@ func (h *ApiHandler) UpdateApi(c *fiber.Ctx) error {
 		return response.ValidationError(c, errors)
 	}
 
-	api.ID = uint(id)
+	api.Id = uint(id)
 	if err := h.apiUseCase.UpdateApi(c.Context(), api); err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "更新失败")
 	}

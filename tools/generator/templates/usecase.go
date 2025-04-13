@@ -4,8 +4,6 @@ var UseCaseTemplate = `package usecase
 
 import (
 	"context"
-	"fmt"
-	"time"
 	"{{.ModuleName}}/internal/entity"
 	"{{.ModuleName}}/internal/repository"
 	"{{.ModuleName}}/pkg/query"

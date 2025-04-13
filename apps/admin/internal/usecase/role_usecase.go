@@ -2,9 +2,9 @@ package usecase
 
 import (
 	"context"
-	"fiber_web/admin/internal/entity"
-	"fiber_web/admin/internal/repository"
-	"fiber_web/admin/pkg/query"
+	"fiber_web/apps/admin/internal/entity"
+	"fiber_web/apps/admin/internal/repository"
+	"fiber_web/pkg/query"
 )
 
 // RoleUseCase 用例接口

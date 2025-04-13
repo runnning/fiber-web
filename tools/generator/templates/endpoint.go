@@ -8,7 +8,6 @@ import (
 	"{{.ModuleName}}/pkg/query"
 	"{{.ModuleName}}/pkg/ctx"
 	"{{.ModuleName}}/pkg/validator"
-	"{{.ModuleName}}/pkg/validator"
 	"strconv"
 	"time"
 	"github.com/gofiber/fiber/v2"
