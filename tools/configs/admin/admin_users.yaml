@@ -46,6 +46,27 @@ entities:
         sql_type: VARCHAR(50)
         nullable: false
         default: "''"
+      - name: email
+        type: string
+        # tag: 'json:"email" gorm:"size:100;not null"'
+        comment: 邮箱
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: password
+        type: string
+        # tag: 'json:"password" gorm:"size:100;not null"'
+        comment: 密码
+        sql_type: VARCHAR(100)
+        nullable: false
+        default: "''"
+      - name: status
+        type: int8
+        sql_type: TINYINT(3)
+        # tag: 'json:"status"'
+        comment: 状态
+        nullable: false
+        default: "1"        
       - name: created_at
         type: time.Time
         # tag: 'json:"created_at" gorm:"not null"'
