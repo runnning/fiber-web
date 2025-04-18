@@ -83,6 +83,15 @@ func (q *MySQLQuerier[T]) buildConditions(query *Query) *gorm.DB {
 		}
 	}
 
+	// 添加分组
+	if len(query.GroupBy) > 0 {
+		for _, group := range query.GroupBy {
+			if group != "" {
+				db = db.Group(group)
+			}
+		}
+	}
+
 	return db
 }
 
