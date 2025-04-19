@@ -17,7 +17,7 @@ type GrpcClient struct {
 type GrpcConfig struct {
 	Addr                         string
 	DialTimeout                  time.Duration
-	MaxRecvMsgSize               int
+	MaxReceiveMsgSize            int
 	MaxSendMsgSize               int
 	InitialWindowSize            int32
 	InitialConnWindowSize        int32
@@ -35,7 +35,7 @@ func defaultGrpcConfig() *GrpcConfig {
 	return &GrpcConfig{
 		Addr:                         ":50051",
 		DialTimeout:                  time.Second * 10,
-		MaxRecvMsgSize:               4 * 1024 * 1024, // 4MB
+		MaxReceiveMsgSize:            4 * 1024 * 1024, // 4MB
 		MaxSendMsgSize:               4 * 1024 * 1024, // 4MB
 		InitialWindowSize:            32 * 1024,       // 32KB
 		InitialConnWindowSize:        64 * 1024,       // 64KB
@@ -60,9 +60,9 @@ func WithGrpcDialTimeout(t time.Duration) GrpcOption {
 	}
 }
 
-func WithGrpcMaxRecvMsgSize(size int) GrpcOption {
+func WithGrpcMaxReceiveMsgSize(size int) GrpcOption {
 	return func(c *GrpcConfig) {
-		c.MaxRecvMsgSize = size
+		c.MaxReceiveMsgSize = size
 	}
 }
 
@@ -110,7 +110,7 @@ func NewGrpcClient(opts ...GrpcOption) (*GrpcClient, error) {
 	// 创建 gRPC 客户端选项
 	dialOptions := []grpc.DialOption{
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(config.MaxRecvMsgSize),
+			grpc.MaxCallRecvMsgSize(config.MaxReceiveMsgSize),
 			grpc.MaxCallSendMsgSize(config.MaxSendMsgSize),
 		),
 		grpc.WithInitialWindowSize(config.InitialWindowSize),
