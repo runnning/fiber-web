@@ -57,6 +57,7 @@ type Query struct {
 	Pagination       *Pagination `json:"pagination"`             // 分页参数
 	Conditions       []Condition `json:"conditions"`             // 查询条件
 	OrderBy          []string    `json:"orderBy,omitempty"`      // 排序字段，格式：字段名 ASC/DESC
+	GroupBy          []string    `json:"groupBy,omitempty"`      // 分组字段
 	SelectFields     []string    `json:"selectFields,omitempty"` // 选择的字段
 	EnablePagination bool        `json:"enablePagination"`       // 是否启用分页
 }
@@ -121,6 +122,12 @@ func (q *Query) AddCondition(field string, operator Operator, value any) *Query 
 // AddOrderBy 追加排序字段
 func (q *Query) AddOrderBy(order string) *Query {
 	q.OrderBy = append(q.OrderBy, order)
+	return q
+}
+
+// AddGroupBy 追加分组字段
+func (q *Query) AddGroupBy(group string) *Query {
+	q.GroupBy = append(q.GroupBy, group)
 	return q
 }
 
