@@ -268,3 +268,136 @@ func (c *Client) Expire(ctx context.Context, key string, expiration time.Duratio
 func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
 	return c.client.TTL(ctx, key).Result()
 }
+
+// GetOrSet 获取值，如果不存在则通过回调函数生成并设置新值
+func (c *Client) GetOrSet(ctx context.Context, key string, value interface{}, fn func() (interface{}, error), expiration time.Duration) error {
+	// 先尝试获取
+	err := c.Get(ctx, key, value)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, ErrNil) {
+		return fmt.Errorf("failed to get value: %w", err)
+	}
+
+	// 调用回调函数生成新值
+	newValue, err := fn()
+	if err != nil {
+		return fmt.Errorf("failed to generate value: %w", err)
+	}
+
+	// 设置新值
+	if err := c.Set(ctx, key, newValue, expiration); err != nil {
+		return fmt.Errorf("failed to set value: %w", err)
+	}
+
+	// 将新值复制到传入的value中
+	data, err := json.Marshal(newValue)
+	if err != nil {
+		return fmt.Errorf("failed to marshal new value: %w", err)
+	}
+	return json.Unmarshal(data, value)
+}
+
+// MSet 批量设置键值对，支持回调函数生成缺失值
+func (c *Client) MSet(ctx context.Context, pairs map[string]interface{}, fn func(key string) (interface{}, error), expiration time.Duration) error {
+	if len(pairs) == 0 {
+		return nil
+	}
+
+	pipe := c.client.Pipeline()
+	for key, value := range pairs {
+		// 如果值为nil且提供了回调函数，则通过函数生成值
+		if value == nil && fn != nil {
+			var err error
+			value, err = fn(key)
+			if err != nil {
+				return fmt.Errorf("failed to generate value for key %s: %w", key, err)
+			}
+		}
+
+		// 序列化值
+		data, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("failed to marshal value for key %s: %w", key, err)
+		}
+
+		// 使用管道设置值
+		pipe.Set(ctx, key, data, expiration)
+	}
+
+	// 执行管道操作
+	cmds, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to execute pipeline: %w", err)
+	}
+
+	// 检查每个命令的执行结果
+	for i, cmd := range cmds {
+		if err := cmd.Err(); err != nil {
+			return fmt.Errorf("failed to set value for command %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// MGet 批量获取键值，支持自定义处理函数
+func (c *Client) MGet(ctx context.Context, keys []string, fn func(key string, value interface{}) error) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// 使用管道批量获取值
+	pipe := c.client.Pipeline()
+	for _, key := range keys {
+		pipe.Get(ctx, key)
+	}
+
+	// 执行管道操作
+	cmds, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to execute pipeline: %w", err)
+	}
+
+	// 处理每个结果
+	for i, cmd := range cmds {
+		key := keys[i]
+
+		// 类型断言为*redis.StringCmd
+		strCmd, ok := cmd.(*redis.StringCmd)
+		if !ok {
+			return fmt.Errorf("unexpected command type for key %s", key)
+		}
+
+		// 获取值
+		data, err := strCmd.Bytes()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				// 键不存在，调用回调函数处理nil值
+				if fn != nil {
+					if err := fn(key, nil); err != nil {
+						return fmt.Errorf("failed to handle nil value for key %s: %w", key, err)
+					}
+				}
+				continue
+			}
+			return fmt.Errorf("failed to get value for key %s: %w", key, err)
+		}
+
+		// 反序列化值
+		var value interface{}
+		if err := json.Unmarshal(data, &value); err != nil {
+			return fmt.Errorf("failed to unmarshal value for key %s: %w", key, err)
+		}
+
+		// 调用回调函数处理值
+		if fn != nil {
+			if err := fn(key, value); err != nil {
+				return fmt.Errorf("failed to handle value for key %s: %w", key, err)
+			}
+		}
+	}
+
+	return nil
+}
