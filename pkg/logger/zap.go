@@ -24,6 +24,10 @@ const (
 	defaultMaxSize    = 100 // 默认最大文件大小（MB）
 	defaultMaxBackups = 3   // 默认最大备份数
 	defaultMaxAge     = 28  // 默认最大保存天数
+
+	// 异步日志配置
+	defaultAsyncWorkers = 4    // 默认异步工作者数量
+	defaultAsyncBuffer  = 1000 // 默认异步缓冲区大小
 )
 
 // Logger wraps zap logger
@@ -31,8 +35,6 @@ type Logger struct {
 	log   *zap.Logger
 	async bool
 	pool  *concurrent.Pool[struct{}]
-	once  sync.Once      // 用于确保只执行一次关闭操作
-	wg    sync.WaitGroup // 用于等待所有异步日志完成
 }
 
 var (
@@ -45,11 +47,22 @@ type Option func(*Logger)
 
 // WithAsync enables async logging with specified worker and buffer size
 func WithAsync(workers, bufferSize int) Option {
+	if workers <= 0 {
+		workers = defaultAsyncWorkers
+	}
+	if bufferSize <= 0 {
+		bufferSize = defaultAsyncBuffer
+	}
+
 	return func(l *Logger) {
 		l.async = true
 		l.pool = concurrent.NewPool[struct{}](workers, bufferSize, concurrent.WithErrorHandler[struct{}](func(err error) {
-			// 如果异步日志发生错误，打印到控制台
-			fmt.Printf("Async logger error: %v\n", err)
+			if l.log != nil {
+				l.log.Error("Async logger error",
+					zap.Error(err),
+					zap.Int("workers", workers),
+					zap.Int("buffer_size", bufferSize))
+			}
 		}))
 		l.pool.Start()
 	}
@@ -208,13 +221,13 @@ func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) 
 		return
 	}
 
-	l.wg.Add(1)
-	if err := l.pool.Submit(func(ctx context.Context) (struct{}, error) {
-		defer l.wg.Done()
+	// 创建日志任务
+	task := func(ctx context.Context) (struct{}, error) {
 		if l.log == nil {
 			return struct{}{}, fmt.Errorf("logger is nil")
 		}
 
+		// 直接写入日志，不使用额外的goroutine
 		switch level {
 		case zapcore.DebugLevel:
 			l.log.Debug(msg, fields...)
@@ -227,13 +240,15 @@ func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) 
 		case zapcore.FatalLevel:
 			l.log.Fatal(msg, fields...)
 		default:
-			return struct{}{}, fmt.Errorf("unknown log level: %v", level)
+			l.log.Error(msg, fields...)
 		}
 		return struct{}{}, nil
-	}); err != nil {
-		l.wg.Done() // 如果提交失败，需要减少计数
+	}
+
+	// 尝试提交任务
+	if err := l.pool.Submit(task); err != nil {
+		// 如果工作池已满或出错，直接同步写入
 		if l.log != nil {
-			l.log.Error("Failed to submit async log", zap.Error(err))
 			l.log.Log(level, msg, fields...)
 		}
 	}
@@ -306,17 +321,11 @@ func (l *Logger) Sync() error {
 		return nil
 	}
 
-	var err error
-	l.once.Do(func() {
-		if l.async {
-			// 等待所有异步日志完成
-			l.wg.Wait()
-			// 停止工作池
-			l.pool.Stop()
-		}
-		err = l.log.Sync()
-	})
-	return err
+	if l.async && l.pool != nil {
+		l.pool.Stop() // 停止工作池
+	}
+
+	return l.log.Sync()
 }
 
 // Close properly closes the logger
@@ -346,7 +355,6 @@ func (l *Logger) With(fields ...zap.Field) *Logger {
 	childLogger := &Logger{
 		log:   l.log.With(fields...),
 		async: l.async,
-		//wg:    l.wg,
 	}
 
 	if l.async {

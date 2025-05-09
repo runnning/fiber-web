@@ -2,8 +2,13 @@ package concurrent
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+)
+
+var (
+	ErrWorkerFull = errors.New("worker pool is full")
 )
 
 // Pool 表示一个通用的工作池
@@ -15,6 +20,7 @@ type Pool[T any] struct {
 	ctx        context.Context                       // 上下文
 	cancel     context.CancelFunc                    // 取消函数
 	errHandler func(error)                           // 错误处理函数
+	wg         sync.WaitGroup                        // 等待组
 }
 
 // Result 表示任务执行的结果
@@ -44,6 +50,7 @@ func NewPool[T any](workers int, bufferSize int, opts ...PoolOption[T]) *Pool[T]
 		ctx:        ctx,
 		cancel:     cancel,
 		errHandler: func(err error) {}, // 默认错误处理函数什么都不做
+		wg:         sync.WaitGroup{},
 	}
 
 	// 应用选项
@@ -56,28 +63,36 @@ func NewPool[T any](workers int, bufferSize int, opts ...PoolOption[T]) *Pool[T]
 
 // Start 启动工作池
 func (p *Pool[T]) Start() {
-	var wg sync.WaitGroup
 	for i := 0; i < p.workers; i++ {
-		wg.Add(1)
+		p.wg.Add(1)
 		go func() {
-			defer wg.Done()
-			for task := range p.tasks {
+			defer p.wg.Done()
+			for {
 				select {
 				case <-p.ctx.Done():
 					return
-				default:
+				case task, ok := <-p.tasks:
+					if !ok {
+						return
+					}
 					result, err := task(p.ctx)
 					if err != nil && p.errHandler != nil {
 						p.errHandler(err)
 					}
-					p.results <- Result[T]{Value: result, Err: err}
+					// 避免在通道已关闭时发送
+					select {
+					case <-p.ctx.Done():
+						return
+					case p.results <- Result[T]{Value: result, Err: err}:
+					}
 				}
 			}
 		}()
 	}
 
+	// 监控工作池状态
 	go func() {
-		wg.Wait()
+		p.wg.Wait()
 		close(p.results)
 		close(p.done)
 	}()
@@ -85,11 +100,18 @@ func (p *Pool[T]) Start() {
 
 // Submit 提交一个任务到工作池
 func (p *Pool[T]) Submit(task func(context.Context) (T, error)) error {
+	if task == nil {
+		return errors.New("task cannot be nil")
+	}
+
 	select {
 	case <-p.ctx.Done():
 		return p.ctx.Err()
 	case p.tasks <- task:
 		return nil
+	default:
+		// 如果通道已满，返回错误
+		return ErrWorkerFull
 	}
 }
 
@@ -100,9 +122,9 @@ func (p *Pool[T]) Results() <-chan Result[T] {
 
 // Stop 停止工作池
 func (p *Pool[T]) Stop() {
-	p.cancel()
-	close(p.tasks)
-	<-p.done // 等待所有工作完成
+	p.cancel()     // 取消上下文
+	close(p.tasks) // 关闭任务通道
+	p.wg.Wait()    // 等待所有工作协程完成
 }
 
 // WaitForCompletion 等待所有任务完成，带超时机制

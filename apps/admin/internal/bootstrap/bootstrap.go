@@ -2,7 +2,9 @@ package bootstrap
 
 import (
 	"context"
+	"log"
 	"sync"
+	"time"
 )
 
 // 生命周期阶段常量
@@ -124,27 +126,51 @@ func (b *Bootstrapper) Shutdown() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// 执行停止前钩子
+	// 快速执行停止前钩子
 	for _, hook := range b.hooks.beforeStop {
-		if err := hook(ctx); err != nil {
-			return err
+		hookCtx, hookCancel := context.WithTimeout(ctx, 1*time.Second)
+		if err := hook(hookCtx); err != nil {
+			log.Printf("钩子执行出错: %v\n", err)
 		}
+		hookCancel()
 	}
 
-	// 逆序停止组件
+	// 并发停止所有组件
+	var wg sync.WaitGroup
 	for i := len(b.components) - 1; i >= 0; i-- {
-		if err := b.components[i].Stop(ctx); err != nil {
-			return err
-		}
+		wg.Add(1)
+		go func(component Component) {
+			defer wg.Done()
+			if err := component.Stop(ctx); err != nil {
+				log.Printf("组件停止出错: %v\n", err)
+			}
+		}(b.components[i])
 	}
 
-	// 执行停止后钩子
+	// 等待所有组件停止，但最多等待3秒
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// 继续执行
+	case <-time.After(3 * time.Second):
+		log.Println("组件关闭超时")
+	}
+
+	// 快速执行停止后钩子
 	for _, hook := range b.hooks.afterStop {
-		if err := hook(ctx); err != nil {
-			return err
+		hookCtx, hookCancel := context.WithTimeout(ctx, 1*time.Second)
+		if err := hook(hookCtx); err != nil {
+			log.Printf("钩子执行出错: %v\n", err)
 		}
+		hookCancel()
 	}
 
 	return nil
