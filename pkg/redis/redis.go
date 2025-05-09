@@ -273,9 +273,6 @@ func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
 func (c *Client) GetOrSet(ctx context.Context, key string, value interface{}, fn func() (interface{}, error), expiration time.Duration) error {
 	// 先尝试获取
 	err := c.Get(ctx, key, value)
-	if err == nil {
-		return nil
-	}
 	if !errors.Is(err, ErrNil) {
 		return fmt.Errorf("failed to get value: %w", err)
 	}
