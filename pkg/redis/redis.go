@@ -299,82 +299,165 @@ func (c *Client) GetOrSet(ctx context.Context, key string, value interface{}, fn
 	return json.Unmarshal(data, value)
 }
 
+// KeyValue 表示一个键值对
+type KeyValue struct {
+	Key   string
+	Value interface{}
+}
+
+const (
+	defaultBatchSize = 100 // 默认批处理大小
+)
+
+// MSetOptions 定义MSet操作的选项
+type MSetOptions struct {
+	BatchSize   int           // 每批处理的键值对数量，0表示使用默认值
+	Expiration  time.Duration // 过期时间
+	SkipOnError bool          // 遇到错误时是否继续处理其他键值对
+}
+
 // MSet 批量设置键值对，支持回调函数生成缺失值
-func (c *Client) MSet(ctx context.Context, pairs map[string]interface{}, fn func(key string) (interface{}, error), expiration time.Duration) error {
+func (c *Client) MSet(ctx context.Context, pairs []KeyValue, fn func(key string) (interface{}, error), opts *MSetOptions) error {
 	if len(pairs) == 0 {
 		return nil
 	}
 
+	if opts == nil {
+		opts = &MSetOptions{
+			BatchSize:   defaultBatchSize,
+			Expiration:  0,
+			SkipOnError: false,
+		}
+	}
+
+	if opts.BatchSize <= 0 {
+		opts.BatchSize = defaultBatchSize
+	}
+
+	var errs []error
+	for i := 0; i < len(pairs); i += opts.BatchSize {
+		end := i + opts.BatchSize
+		if end > len(pairs) {
+			end = len(pairs)
+		}
+
+		if err := c.mSetBatch(ctx, pairs[i:end], fn, opts); err != nil {
+			if !opts.SkipOnError {
+				return err
+			}
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("multiple errors occurred during MSet: %v", errs)
+	}
+	return nil
+}
+
+// mSetBatch 处理一批键值对的设置操作
+func (c *Client) mSetBatch(ctx context.Context, pairs []KeyValue, fn func(key string) (interface{}, error), opts *MSetOptions) error {
 	pipe := c.client.Pipeline()
-	for key, value := range pairs {
-		// 如果值为nil且提供了回调函数，则通过函数生成值
+
+	for _, pair := range pairs {
+		value := pair.Value
 		if value == nil && fn != nil {
 			var err error
-			value, err = fn(key)
+			value, err = fn(pair.Key)
 			if err != nil {
-				return fmt.Errorf("failed to generate value for key %s: %w", key, err)
+				return fmt.Errorf("failed to generate value for key %s: %w", pair.Key, err)
 			}
 		}
 
-		// 序列化值
 		data, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf("failed to marshal value for key %s: %w", key, err)
+			return fmt.Errorf("failed to marshal value for key %s: %w", pair.Key, err)
 		}
 
-		// 使用管道设置值
-		pipe.Set(ctx, key, data, expiration)
+		pipe.Set(ctx, pair.Key, data, opts.Expiration)
 	}
 
-	// 执行管道操作
 	cmds, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to execute pipeline: %w", err)
 	}
 
-	// 检查每个命令的执行结果
 	for i, cmd := range cmds {
 		if err := cmd.Err(); err != nil {
-			return fmt.Errorf("failed to set value for command %d: %w", i, err)
+			return fmt.Errorf("failed to set value for key %s: %w", pairs[i].Key, err)
 		}
 	}
 
 	return nil
 }
 
+// MGetOptions 定义MGet操作的选项
+type MGetOptions struct {
+	BatchSize   int  // 每批处理的键数量，0表示使用默认值
+	SkipOnError bool // 遇到错误时是否继续处理其他键
+}
+
 // MGet 批量获取键值，支持自定义处理函数
-func (c *Client) MGet(ctx context.Context, keys []string, fn func(key string, value interface{}) error) error {
+func (c *Client) MGet(ctx context.Context, keys []string, fn func(key string, value interface{}) error, opts *MGetOptions) error {
 	if len(keys) == 0 {
 		return nil
 	}
 
-	// 使用管道批量获取值
+	if opts == nil {
+		opts = &MGetOptions{
+			BatchSize:   defaultBatchSize,
+			SkipOnError: false,
+		}
+	}
+
+	if opts.BatchSize <= 0 {
+		opts.BatchSize = defaultBatchSize
+	}
+
+	var errs []error
+	for i := 0; i < len(keys); i += opts.BatchSize {
+		end := i + opts.BatchSize
+		if end > len(keys) {
+			end = len(keys)
+		}
+
+		if err := c.mGetBatch(ctx, keys[i:end], fn); err != nil {
+			if !opts.SkipOnError {
+				return err
+			}
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("multiple errors occurred during MGet: %v", errs)
+	}
+	return nil
+}
+
+// mGetBatch 处理一批键的获取操作
+func (c *Client) mGetBatch(ctx context.Context, keys []string, fn func(key string, value interface{}) error) error {
 	pipe := c.client.Pipeline()
+
 	for _, key := range keys {
 		pipe.Get(ctx, key)
 	}
 
-	// 执行管道操作
 	cmds, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to execute pipeline: %w", err)
 	}
 
-	// 处理每个结果
 	for i, cmd := range cmds {
 		key := keys[i]
-
-		// 类型断言为*redis.StringCmd
 		strCmd, ok := cmd.(*redis.StringCmd)
 		if !ok {
 			return fmt.Errorf("unexpected command type for key %s", key)
 		}
 
-		// 获取值
 		data, err := strCmd.Bytes()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				// 键不存在，调用回调函数处理nil值
 				if fn != nil {
 					if err := fn(key, nil); err != nil {
 						return fmt.Errorf("failed to handle nil value for key %s: %w", key, err)
@@ -385,13 +468,11 @@ func (c *Client) MGet(ctx context.Context, keys []string, fn func(key string, va
 			return fmt.Errorf("failed to get value for key %s: %w", key, err)
 		}
 
-		// 反序列化值
 		var value interface{}
 		if err := json.Unmarshal(data, &value); err != nil {
 			return fmt.Errorf("failed to unmarshal value for key %s: %w", key, err)
 		}
 
-		// 调用回调函数处理值
 		if fn != nil {
 			if err := fn(key, value); err != nil {
 				return fmt.Errorf("failed to handle value for key %s: %w", key, err)
