@@ -221,27 +221,29 @@ func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) 
 		return
 	}
 
+	// 在提交异步任务前捕获调用者信息
+	caller := zapcore.NewEntryCaller(runtime.Caller(2))
+
 	// 创建日志任务
 	task := func(ctx context.Context) (struct{}, error) {
 		if l.log == nil {
 			return struct{}{}, fmt.Errorf("logger is nil")
 		}
 
-		// 直接写入日志，不使用额外的goroutine
-		switch level {
-		case zapcore.DebugLevel:
-			l.log.Debug(msg, fields...)
-		case zapcore.InfoLevel:
-			l.log.Info(msg, fields...)
-		case zapcore.WarnLevel:
-			l.log.Warn(msg, fields...)
-		case zapcore.ErrorLevel:
-			l.log.Error(msg, fields...)
-		case zapcore.FatalLevel:
-			l.log.Fatal(msg, fields...)
-		default:
-			l.log.Error(msg, fields...)
+		// 创建一个新的 Entry
+		entry := zapcore.Entry{
+			Level:      level,
+			Time:       time.Now(),
+			Message:    msg,
+			Caller:     caller,
+			LoggerName: "",
 		}
+
+		// 使用 log.Core().Write 直接写入，以保持正确的调用位置
+		if err := l.log.Core().Write(entry, fields); err != nil {
+			return struct{}{}, err
+		}
+
 		return struct{}{}, nil
 	}
 
@@ -249,7 +251,14 @@ func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) 
 	if err := l.pool.Submit(task); err != nil {
 		// 如果工作池已满或出错，直接同步写入
 		if l.log != nil {
-			l.log.Log(level, msg, fields...)
+			entry := zapcore.Entry{
+				Level:      level,
+				Time:       time.Now(),
+				Message:    msg,
+				Caller:     caller,
+				LoggerName: "",
+			}
+			_ = l.log.Core().Write(entry, fields)
 		}
 	}
 }
