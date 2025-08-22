@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"go.uber.org/zap"
 )
 
 var (
@@ -132,7 +131,7 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 	})
 
 	if err != nil {
-		logger.Error("解析令牌失败", zap.Error(err))
+		logger.ErrorLog("解析令牌失败", logger.ErrorField(err))
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
 		}

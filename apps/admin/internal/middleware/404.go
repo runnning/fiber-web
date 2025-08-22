@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"go.uber.org/zap"
 )
 
 // NotFound 返回一个 404 处理中间件
@@ -64,11 +63,11 @@ func NotFound() fiber.Handler {
 		if !found {
 			// 记录 404 日志
 			logger.Warn("Route not found",
-				zap.String("request_id", c.Get("X-Request-ID")),
-				zap.String("path", requestPath),
-				zap.String("method", requestMethod),
-				zap.String("ip", c.IP()),
-				zap.String("user_agent", c.Get("User-Agent")),
+				logger.String("request_id", c.Get("X-Request-ID")),
+				logger.String("path", requestPath),
+				logger.String("method", requestMethod),
+				logger.String("ip", c.IP()),
+				logger.String("user_agent", c.Get("User-Agent")),
 			)
 
 			// 构建错误消息

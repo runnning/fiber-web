@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"go.uber.org/zap"
 )
 
 // Recovery 返回一个自定义的恢复中间件
@@ -37,13 +36,13 @@ func Recovery(env string) fiber.Handler {
 				}
 
 				// 记录错误日志
-				logger.Error("Recovered from panic",
-					zap.Error(err),
-					zap.String("request_id", c.Get("X-Request-ID")),
-					zap.String("path", c.Path()),
-					zap.String("method", c.Method()),
-					zap.String("ip", c.IP()),
-					zap.Strings("stack", relevantStack),
+				logger.ErrorLog("Recovered from panic",
+					logger.ErrorField(err),
+					logger.String("request_id", c.Get("X-Request-ID")),
+					logger.String("path", c.Path()),
+					logger.String("method", c.Method()),
+					logger.String("ip", c.IP()),
+					logger.Any("stack", relevantStack),
 				)
 
 				// 使用传入的环境变量

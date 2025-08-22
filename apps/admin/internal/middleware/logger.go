@@ -6,7 +6,6 @@ import (
 	"fiber_web/pkg/logger"
 
 	"github.com/gofiber/fiber/v2"
-	"go.uber.org/zap"
 )
 
 // Logger 返回一个使用 zap 的日志中间件
@@ -25,13 +24,13 @@ func Logger() fiber.Handler {
 		reqID := c.GetRespHeader("X-Request-ID")
 
 		logger.Info("HTTP Request",
-			zap.String("request_id", reqID),
-			zap.String("method", method),
-			zap.String("path", path),
-			zap.Int("status", status),
-			zap.Duration("latency", latency),
-			zap.String("ip", c.IP()),
-			zap.String("user_agent", c.Get("User-Agent")),
+			logger.String("request_id", reqID),
+			logger.String("method", method),
+			logger.String("path", path),
+			logger.Int("status", status),
+			logger.Duration("latency", latency),
+			logger.String("ip", c.IP()),
+			logger.String("user_agent", c.Get("User-Agent")),
 		)
 
 		return err

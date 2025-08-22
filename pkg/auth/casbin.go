@@ -8,7 +8,7 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
-	"go.uber.org/zap"
+
 	"gorm.io/gorm"
 )
 
@@ -49,7 +49,7 @@ func InitRbac(db *gorm.DB) error {
 		// 初始化 Casbin adapter
 		adapter, err := gormadapter.NewAdapterByDB(db)
 		if err != nil {
-			logger.Error("Failed to create Casbin adapter", zap.Error(err))
+			logger.ErrorLog("Failed to create Casbin adapter", logger.ErrorField(err))
 			initErr = err
 			return
 		}
@@ -57,7 +57,7 @@ func InitRbac(db *gorm.DB) error {
 		// 加载 RBAC 模型
 		m, err := model.NewModelFromString(rbacModelRule)
 		if err != nil {
-			logger.Error("Failed to create Casbin model", zap.Error(err))
+			logger.ErrorLog("Failed to create Casbin model", logger.ErrorField(err))
 			initErr = err
 			return
 		}
@@ -65,14 +65,14 @@ func InitRbac(db *gorm.DB) error {
 		// 创建 enforcer
 		instance.enforcer, err = casbin.NewEnforcer(m, adapter)
 		if err != nil {
-			logger.Error("Failed to create Casbin enforcer", zap.Error(err))
+			logger.ErrorLog("Failed to create Casbin enforcer", logger.ErrorField(err))
 			initErr = err
 			return
 		}
 
 		// 加载策略
 		if err := instance.LoadPolicy(); err != nil {
-			logger.Error("Failed to load Casbin policy", zap.Error(err))
+			logger.ErrorLog("Failed to load Casbin policy", logger.ErrorField(err))
 			initErr = err
 			return
 		}
@@ -125,11 +125,11 @@ func (e *Enforcer) AddPolicy(role, path, method string) error {
 	defer e.mu.Unlock()
 	_, err := e.enforcer.AddPolicy(role, path, method)
 	if err != nil {
-		logger.Error("Failed to add policy",
-			zap.String("role", role),
-			zap.String("path", path),
-			zap.String("method", method),
-			zap.Error(err))
+		logger.ErrorLog("Failed to add policy",
+			logger.String("role", role),
+			logger.String("path", path),
+			logger.String("method", method),
+			logger.ErrorField(err))
 		return err
 	}
 	return nil
@@ -141,11 +141,11 @@ func (e *Enforcer) RemovePolicy(role, path, method string) error {
 	defer e.mu.Unlock()
 	_, err := e.enforcer.RemovePolicy(role, path, method)
 	if err != nil {
-		logger.Error("Failed to remove policy",
-			zap.String("role", role),
-			zap.String("path", path),
-			zap.String("method", method),
-			zap.Error(err))
+		logger.ErrorLog("Failed to remove policy",
+			logger.String("role", role),
+			logger.String("path", path),
+			logger.String("method", method),
+			logger.ErrorField(err))
 		return err
 	}
 	return nil
@@ -157,10 +157,10 @@ func (e *Enforcer) AddRoleForUser(user, role string) error {
 	defer e.mu.Unlock()
 	_, err := e.enforcer.AddGroupingPolicy(user, role)
 	if err != nil {
-		logger.Error("Failed to add role for user",
-			zap.String("user", user),
-			zap.String("role", role),
-			zap.Error(err))
+		logger.ErrorLog("Failed to add role for user",
+			logger.String("user", user),
+			logger.String("role", role),
+			logger.ErrorField(err))
 		return err
 	}
 	return nil
@@ -172,10 +172,10 @@ func (e *Enforcer) RemoveRoleForUser(user, role string) error {
 	defer e.mu.Unlock()
 	_, err := e.enforcer.RemoveGroupingPolicy(user, role)
 	if err != nil {
-		logger.Error("Failed to remove role from user",
-			zap.String("user", user),
-			zap.String("role", role),
-			zap.Error(err))
+		logger.ErrorLog("Failed to remove role from user",
+			logger.String("user", user),
+			logger.String("role", role),
+			logger.ErrorField(err))
 		return err
 	}
 	return nil
@@ -273,9 +273,9 @@ func (e *Enforcer) DeleteRole(role string) error {
 	defer e.mu.Unlock()
 	_, err := e.enforcer.DeleteRole(role)
 	if err != nil {
-		logger.Error("Failed to delete role",
-			zap.String("role", role),
-			zap.Error(err))
+		logger.ErrorLog("Failed to delete role",
+			logger.String("role", role),
+			logger.ErrorField(err))
 		return err
 	}
 	return nil
@@ -287,9 +287,9 @@ func (e *Enforcer) DeleteUser(user string) error {
 	defer e.mu.Unlock()
 	_, err := e.enforcer.DeleteUser(user)
 	if err != nil {
-		logger.Error("Failed to delete user",
-			zap.String("user", user),
-			zap.Error(err))
+		logger.ErrorLog("Failed to delete user",
+			logger.String("user", user),
+			logger.ErrorField(err))
 		return err
 	}
 	return nil

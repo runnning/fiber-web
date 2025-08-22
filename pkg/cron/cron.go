@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
-	"go.uber.org/zap"
 )
 
 // TaskStatus 任务状态
@@ -113,7 +112,7 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 
 	wrappedFunc := func() {
 		if err := s.runTask(task); err != nil && !errors.Is(err, ErrTaskStopped) {
-			s.log.Error("task execution failed", zap.String("task", name), zap.Error(err))
+			s.log.Error("task execution failed", logger.String("task", name), logger.ErrorField(err))
 		}
 	}
 
@@ -124,7 +123,7 @@ func (s *Scheduler) AddTask(name, spec string, f TaskFunc, timeout time.Duration
 
 	task.EntryID = entryID
 	s.tasks[name] = task
-	s.log.Info("task added successfully", zap.String("task", name), zap.String("spec", spec))
+	s.log.Info("task added successfully", logger.String("task", name), logger.String("spec", spec))
 	return nil
 }
 
@@ -187,7 +186,7 @@ func (s *Scheduler) RemoveTask(name string) error {
 
 	s.cron.Remove(task.EntryID)
 	delete(s.tasks, name)
-	s.log.Info("task removed", zap.String("task", name))
+	s.log.Info("task removed", logger.String("task", name))
 	return nil
 }
 

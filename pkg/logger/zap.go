@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,6 +30,267 @@ const (
 	defaultAsyncWorkers = 4    // 默认异步工作者数量
 	defaultAsyncBuffer  = 1000 // 默认异步缓冲区大小
 )
+
+// FieldType 字段类型枚举
+type FieldType int
+
+const (
+	StringFieldType FieldType = iota
+	IntFieldType
+	Int64FieldType
+	Float64FieldType
+	BoolFieldType
+	ErrorFieldType
+	TimeFieldType
+	DurationFieldType
+	BinaryFieldType
+	ByteStringFieldType
+	AnyFieldType
+	SkipFieldType
+)
+
+// Field 代表一个日志字段的抽象接口
+type Field interface {
+	Key() string
+	Value() interface{}
+	Type() FieldType
+	toZapField() zap.Field
+}
+
+// logField 实现 Field 接口
+type logField struct {
+	key       string
+	value     interface{}
+	fieldType FieldType
+}
+
+func (f *logField) Key() string {
+	return f.key
+}
+
+func (f *logField) Value() interface{} {
+	return f.value
+}
+
+func (f *logField) Type() FieldType {
+	return f.fieldType
+}
+
+// toZapField 将自定义 Field 转换为 zap.Field
+func (f *logField) toZapField() zap.Field {
+	switch f.fieldType {
+	case StringFieldType:
+		return zap.String(f.key, f.value.(string))
+	case IntFieldType:
+		return zap.Int(f.key, f.value.(int))
+	case Int64FieldType:
+		return zap.Int64(f.key, f.value.(int64))
+	case Float64FieldType:
+		return zap.Float64(f.key, f.value.(float64))
+	case BoolFieldType:
+		return zap.Bool(f.key, f.value.(bool))
+	case ErrorFieldType:
+		return zap.Error(f.value.(error))
+	case TimeFieldType:
+		return zap.Time(f.key, f.value.(time.Time))
+	case DurationFieldType:
+		return zap.Duration(f.key, f.value.(time.Duration))
+	case BinaryFieldType:
+		return zap.Binary(f.key, f.value.([]byte))
+	case ByteStringFieldType:
+		return zap.ByteString(f.key, f.value.([]byte))
+	case AnyFieldType:
+		return zap.Any(f.key, f.value)
+	case SkipFieldType:
+		return zap.Skip()
+	default:
+		return zap.Any(f.key, f.value)
+	}
+}
+
+// convertFields 批量转换 Field 切片为 zap.Field 切片
+func convertFields(fields []Field) []zap.Field {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	zapFields := make([]zap.Field, len(fields))
+	for i, field := range fields {
+		zapFields[i] = field.toZapField()
+	}
+	return zapFields
+}
+
+// Field 构造函数 - 提供便捷的字段创建方式
+
+// String 创建字符串字段
+func String(key, value string) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: StringFieldType,
+	}
+}
+
+// Int 创建整数字段
+func Int(key string, value int) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: IntFieldType,
+	}
+}
+
+// Int64 创建 int64 字段
+func Int64(key string, value int64) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: Int64FieldType,
+	}
+}
+
+// Float64 创建 float64 字段
+func Float64(key string, value float64) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: Float64FieldType,
+	}
+}
+
+// Bool 创建布尔字段
+func Bool(key string, value bool) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: BoolFieldType,
+	}
+}
+
+// ErrorField 创建错误字段
+func ErrorField(err error) Field {
+	return &logField{
+		key:       "error",
+		value:     err,
+		fieldType: ErrorFieldType,
+	}
+}
+
+// NamedError 创建带自定义键名的错误字段
+func NamedError(key string, err error) Field {
+	return &logField{
+		key:       key,
+		value:     err,
+		fieldType: ErrorFieldType,
+	}
+}
+
+// Time 创建时间字段
+func Time(key string, value time.Time) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: TimeFieldType,
+	}
+}
+
+// Duration 创建时间段字段
+func Duration(key string, value time.Duration) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: DurationFieldType,
+	}
+}
+
+// Binary 创建二进制字段
+func Binary(key string, value []byte) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: BinaryFieldType,
+	}
+}
+
+// ByteString 创建字节字符串字段
+func ByteString(key string, value []byte) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: ByteStringFieldType,
+	}
+}
+
+// Any 创建任意类型字段
+func Any(key string, value interface{}) Field {
+	return &logField{
+		key:       key,
+		value:     value,
+		fieldType: AnyFieldType,
+	}
+}
+
+// Skip 创建跳过字段
+func Skip() Field {
+	return &logField{
+		fieldType: SkipFieldType,
+	}
+}
+
+// 向后兼容函数 - 如果有现有代码使用 zap.Field，可以通过这些函数迁移
+
+// FromZapField 从 zap.Field 创建 Field（用于迁移）
+func FromZapField(zapField zap.Field) Field {
+	// 根据 zap.Field 的类型创建对应的 Field
+	switch zapField.Type {
+	case zapcore.StringType:
+		return String(zapField.Key, zapField.String)
+	case zapcore.Int64Type:
+		return Int64(zapField.Key, zapField.Integer)
+	case zapcore.Float64Type:
+		return Float64(zapField.Key, math.Float64frombits(uint64(zapField.Integer)))
+	case zapcore.BoolType:
+		return Bool(zapField.Key, zapField.Integer == 1)
+	case zapcore.ErrorType:
+		if err, ok := zapField.Interface.(error); ok {
+			return ErrorField(err)
+		}
+		return Any(zapField.Key, zapField.Interface)
+	case zapcore.TimeType:
+		if zapField.Interface != nil {
+			if t, ok := zapField.Interface.(time.Time); ok {
+				return Time(zapField.Key, t)
+			}
+		}
+		return Any(zapField.Key, zapField.Interface)
+	case zapcore.DurationType:
+		return Duration(zapField.Key, time.Duration(zapField.Integer))
+	case zapcore.BinaryType:
+		if data, ok := zapField.Interface.([]byte); ok {
+			return Binary(zapField.Key, data)
+		}
+		return Any(zapField.Key, zapField.Interface)
+	case zapcore.ByteStringType:
+		if data, ok := zapField.Interface.([]byte); ok {
+			return ByteString(zapField.Key, data)
+		}
+		return Any(zapField.Key, zapField.Interface)
+	case zapcore.SkipType:
+		return Skip()
+	default:
+		return Any(zapField.Key, zapField.Interface)
+	}
+}
+
+// FromZapFields 批量转换 zap.Field 切片（用于迁移）
+func FromZapFields(zapFields []zap.Field) []Field {
+	fields := make([]Field, len(zapFields))
+	for i, zapField := range zapFields {
+		fields[i] = FromZapField(zapField)
+	}
+	return fields
+}
 
 // Logger wraps zap logger
 type Logger struct {
@@ -216,13 +478,16 @@ func NewLogger(cfg *config.LogConfig, opts ...Option) (*Logger, error) {
 }
 
 // asyncLog 异步记录日志
-func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) {
+func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...Field) {
 	if l == nil || l.pool == nil {
 		return
 	}
 
 	// 在提交异步任务前捕获调用者信息
 	caller := zapcore.NewEntryCaller(runtime.Caller(2))
+
+	// 转换字段
+	zapFields := convertFields(fields)
 
 	// 创建日志任务
 	task := func(ctx context.Context) (struct{}, error) {
@@ -240,7 +505,7 @@ func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) 
 		}
 
 		// 使用 log.Core().Write 直接写入，以保持正确的调用位置
-		if err := l.log.Core().Write(entry, fields); err != nil {
+		if err := l.log.Core().Write(entry, zapFields); err != nil {
 			return struct{}{}, err
 		}
 
@@ -258,69 +523,70 @@ func (l *Logger) asyncLog(level zapcore.Level, msg string, fields ...zap.Field) 
 				Caller:     caller,
 				LoggerName: "",
 			}
-			_ = l.log.Core().Write(entry, fields)
+			_ = l.log.Core().Write(entry, zapFields)
 		}
 	}
 }
 
 // Debug logs a debug message
-func (l *Logger) Debug(msg string, fields ...zap.Field) {
+func (l *Logger) Debug(msg string, fields ...Field) {
 	if l == nil || l.log == nil {
 		return
 	}
 	if l.async {
 		l.asyncLog(zapcore.DebugLevel, msg, fields...)
 	} else {
-		l.log.Debug(msg, fields...)
+		l.log.Debug(msg, convertFields(fields)...)
 	}
 }
 
 // Info logs an info message
-func (l *Logger) Info(msg string, fields ...zap.Field) {
+func (l *Logger) Info(msg string, fields ...Field) {
 	if l == nil || l.log == nil {
 		return
 	}
 	if l.async {
 		l.asyncLog(zapcore.InfoLevel, msg, fields...)
 	} else {
-		l.log.Info(msg, fields...)
+		l.log.Info(msg, convertFields(fields)...)
 	}
 }
 
 // Warn logs a warning message
-func (l *Logger) Warn(msg string, fields ...zap.Field) {
+func (l *Logger) Warn(msg string, fields ...Field) {
 	if l == nil || l.log == nil {
 		return
 	}
 	if l.async {
 		l.asyncLog(zapcore.WarnLevel, msg, fields...)
 	} else {
-		l.log.Warn(msg, fields...)
+		l.log.Warn(msg, convertFields(fields)...)
 	}
 }
 
 // Error logs an error message
-func (l *Logger) Error(msg string, fields ...zap.Field) {
+func (l *Logger) Error(msg string, fields ...Field) {
 	if l == nil || l.log == nil {
 		return
 	}
 	if l.async {
 		l.asyncLog(zapcore.ErrorLevel, msg, fields...)
 	} else {
-		l.log.Error(msg, fields...)
+		l.log.Error(msg, convertFields(fields)...)
 	}
 }
 
 // Fatal logs a fatal message and exits
-func (l *Logger) Fatal(msg string, fields ...zap.Field) {
+func (l *Logger) Fatal(msg string, fields ...Field) {
 	if l == nil || l.log == nil {
 		return
 	}
+	zapFields := convertFields(fields)
 	if l.async {
 		// 对于Fatal级别，直接同步写入
-		l.log.Fatal(msg, fields...)
+		l.log.Fatal(msg, zapFields...)
 	} else {
-		l.log.Fatal(msg, fields...)
+		l.log.Fatal(msg, zapFields...)
 	}
 }
 
@@ -356,13 +622,14 @@ func InitLogger(cfg *config.LogConfig, opts ...Option) error {
 }
 
 // With creates a child logger with additional fields
-func (l *Logger) With(fields ...zap.Field) *Logger {
+func (l *Logger) With(fields ...Field) *Logger {
 	if l == nil || l.log == nil {
 		return &Logger{}
 	}
 
+	zapFields := convertFields(fields)
 	childLogger := &Logger{
-		log:   l.log.With(fields...),
+		log:   l.log.With(zapFields...),
 		async: l.async,
 	}
 
@@ -379,37 +646,37 @@ func GetLogger() *Logger {
 }
 
 // Debug  logger methods
-func Debug(msg string, fields ...zap.Field) {
+func Debug(msg string, fields ...Field) {
 	if defaultLogger != nil {
 		defaultLogger.Debug(msg, fields...)
 	}
 }
 
-func Info(msg string, fields ...zap.Field) {
+func Info(msg string, fields ...Field) {
 	if defaultLogger != nil {
 		defaultLogger.Info(msg, fields...)
 	}
 }
 
-func Warn(msg string, fields ...zap.Field) {
+func Warn(msg string, fields ...Field) {
 	if defaultLogger != nil {
 		defaultLogger.Warn(msg, fields...)
 	}
 }
 
-func Error(msg string, fields ...zap.Field) {
+func ErrorLog(msg string, fields ...Field) {
 	if defaultLogger != nil {
 		defaultLogger.Error(msg, fields...)
 	}
 }
 
-func Fatal(msg string, fields ...zap.Field) {
+func Fatal(msg string, fields ...Field) {
 	if defaultLogger != nil {
 		defaultLogger.Fatal(msg, fields...)
 	}
 }
 
-func With(fields ...zap.Field) *Logger {
+func With(fields ...Field) *Logger {
 	if defaultLogger != nil {
 		return defaultLogger.With(fields...)
 	}

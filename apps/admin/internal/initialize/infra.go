@@ -11,8 +11,6 @@ import (
 	"fiber_web/pkg/redis"
 	"fmt"
 	"sync"
-
-	"go.uber.org/zap"
 )
 
 // Infra 基础设施
@@ -134,7 +132,7 @@ func (i *Infra) Shutdown() error {
 	// 关闭 Redis
 	if i.Redis != nil {
 		if err := i.Redis.Close(); err != nil {
-			i.Logger.Error("Failed to close Redis", zap.Error(err))
+			i.Logger.Error("Failed to close Redis", logger.ErrorField(err))
 			errs = append(errs, err)
 		} else {
 			i.Logger.Info("Redis connection closed")
@@ -144,7 +142,7 @@ func (i *Infra) Shutdown() error {
 	// 关闭数据库
 	if i.DB != nil {
 		if err := i.DB.Close(); err != nil {
-			i.Logger.Error("Failed to close DB", zap.Error(err))
+			i.Logger.Error("Failed to close DB", logger.ErrorField(err))
 			errs = append(errs, err)
 		} else {
 			i.Logger.Info("Database connection closed")

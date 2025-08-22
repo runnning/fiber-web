@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/nsqio/go-nsq"
-	"go.uber.org/zap"
 )
 
 // 监控指标
@@ -119,9 +118,9 @@ func (p *Producer) Publish(ctx context.Context, topic string, message []byte) er
 			}
 			atomic.AddInt64(&p.metrics.errors, 1)
 			logger.Warn("发布消息失败，准备重试",
-				zap.String("主题", topic),
-				zap.Int("重试次数", i+1),
-				zap.Error(err))
+				logger.String("主题", topic),
+				logger.Int("重试次数", i+1),
+				logger.ErrorField(err))
 			time.Sleep(DefaultOptions.RetryInterval)
 		}
 	}
@@ -148,10 +147,10 @@ func NewConsumer(topic, channel string, cfg *config.NSQConfig, opts *Options) (*
 
 	consumer, err := nsq.NewConsumer(topic, channel, nsqConfig)
 	if err != nil {
-		logger.Error("创建 NSQ 消费者失败",
-			zap.String("主题", topic),
-			zap.String("通道", channel),
-			zap.Error(err))
+		logger.ErrorLog("创建 NSQ 消费者失败",
+			logger.String("主题", topic),
+			logger.String("通道", channel),
+			logger.ErrorField(err))
 		return nil, err
 	}
 
@@ -159,16 +158,16 @@ func NewConsumer(topic, channel string, cfg *config.NSQConfig, opts *Options) (*
 
 	addr := fmt.Sprintf("%s:%d", cfg.Lookupd.Host, cfg.Lookupd.Port)
 	if err := consumer.ConnectToNSQLookupd(addr); err != nil {
-		logger.Error("连接 NSQ lookupd 失败",
-			zap.String("地址", addr),
-			zap.Error(err))
+		logger.ErrorLog("连接 NSQ lookupd 失败",
+			logger.String("地址", addr),
+			logger.ErrorField(err))
 		return nil, err
 	}
 
 	logger.Info("成功连接 NSQ 消费者",
-		zap.String("主题", topic),
-		zap.String("通道", channel),
-		zap.Bool("顺序消费", opts.OrderedConsume))
+		logger.String("主题", topic),
+		logger.String("通道", channel),
+		logger.Bool("顺序消费", opts.OrderedConsume))
 
 	return &Consumer{
 		consumer: consumer,
@@ -220,8 +219,8 @@ func (c *Consumer) AddHandler(handler nsq.Handler) {
 		// 顺序消费时只使用单个处理器
 		c.consumer.AddHandler(wrapper)
 		logger.Info("已启用顺序消费模式",
-			zap.String("主题", c.topic),
-			zap.String("通道", c.channel))
+			logger.String("主题", c.topic),
+			logger.String("通道", c.channel))
 	} else {
 		// 非顺序消费时使用并发处理器
 		c.consumer.AddConcurrentHandlers(wrapper, DefaultOptions.MaxInFlight)

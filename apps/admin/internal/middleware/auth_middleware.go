@@ -6,7 +6,7 @@ import (
 	"fiber_web/pkg/logger"
 	"fiber_web/pkg/response"
 	"fiber_web/pkg/utils/errorx"
-	"go.uber.org/zap"
+
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -52,19 +52,19 @@ func Rbac() fiber.Handler {
 
 		allowed, err := auth.GetEnforcer().HasPermission(claims.Role, c.Path(), c.Method())
 		if err != nil {
-			logger.Error("Failed to check permission",
-				zap.String("role", claims.Role),
-				zap.String("path", c.Path()),
-				zap.String("method", c.Method()),
-				zap.Error(err))
+			logger.ErrorLog("Failed to check permission",
+				logger.String("role", claims.Role),
+				logger.String("path", c.Path()),
+				logger.String("method", c.Method()),
+				logger.ErrorField(err))
 			return response.ServerError(c, errorx.NewSystemError("failed to check permission"))
 		}
 
 		if !allowed {
 			logger.Warn("Permission denied",
-				zap.String("role", claims.Role),
-				zap.String("path", c.Path()),
-				zap.String("method", c.Method()))
+				logger.String("role", claims.Role),
+				logger.String("path", c.Path()),
+				logger.String("method", c.Method()))
 			return response.Forbidden(c, "permission denied")
 		}
 		return c.Next()

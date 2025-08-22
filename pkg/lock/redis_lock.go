@@ -6,8 +6,6 @@ import (
 	"fiber_web/pkg/logger"
 	redisClient "fiber_web/pkg/redis"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 var (
@@ -126,9 +124,9 @@ func (l *RedisLock) GetLockTTL(ctx context.Context, key string) (time.Duration, 
 
 func (l *RedisLock) handleError(operation string, key string, err error) error {
 	if err != nil {
-		logger.Error(operation+" failed",
-			zap.String("key", key),
-			zap.Error(err))
+		logger.ErrorLog(operation+" failed",
+			logger.String("key", key),
+			logger.ErrorField(err))
 	}
 	return err
 }
